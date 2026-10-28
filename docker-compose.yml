@@ -1,0 +1,28 @@
+services:
+  # Clone leve + índice. Rode uma vez (e de novo com `update` para atualizar):
+  #   docker compose run --rm leis-mcp index
+  #   docker compose run --rm leis-mcp warm
+  # Servidor por stdio (é assim que o Claude Code/Desktop chama):
+  #   docker compose run --rm -i leis-mcp serve
+  leis-mcp:
+    build: .
+    image: leis-mcp:latest
+    volumes:
+      - leis-data:/data
+    stdin_open: true
+    command: ["serve"]
+
+  # Mesmo servidor por HTTP (Streamable HTTP em http://localhost:8000/mcp):
+  #   docker compose --profile http up leis-mcp-http
+  leis-mcp-http:
+    image: leis-mcp:latest
+    build: .
+    profiles: ["http"]
+    volumes:
+      - leis-data:/data
+    ports:
+      - "8000:8000"
+    command: ["serve", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8000"]
+
+volumes:
+  leis-data:

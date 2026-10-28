@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.memsearch/
+*.egg-info/
+dist/
+
+# Local agent notes (lessons, todo)
+.claude/
+
+# Demo video project: sources, audio and renders stay local
+docs/leis-mcp-demo/
+*.mp4

@@ -1,0 +1,35 @@
+[project]
+name = "leis-mcp"
+version = "0.1.0"
+description = "Servidor MCP para buscar e citar a legislação brasileira do repositório ctresb/leis"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp[cli]>=2.3.0",
+    "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+leis-mcp = "leis_mcp.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.2,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: usa conteúdo real do ctresb/leis (rede + índice local)"]

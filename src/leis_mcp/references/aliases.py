@@ -1,0 +1,73 @@
+"""How users name norm kinds and well-known laws. Keys are already normalized (lowercase, no accents)."""
+
+# User wording for a kind of norm -> directory name in the source repository.
+KIND_ALIASES: dict[str, str] = {
+    "lei complementar": "leis-complementares",
+    "lc": "leis-complementares",
+    "lcp": "leis-complementares",
+    "decreto-lei": "decretos-lei",
+    "decreto lei": "decretos-lei",
+    "dl": "decretos-lei",
+    "del": "decretos-lei",
+    "lei delegada": "leis-delegadas",
+    "lei ordinaria": "leis-ordinarias",
+    "lei": "leis-ordinarias",
+    "decreto legislativo": "decretos-legislativos",
+    "dlg": "decretos-legislativos",
+    "decreto": "decretos",
+    "dec": "decretos",
+    "medida provisoria": "medidas-provisorias",
+    "mpv": "medidas-provisorias",
+    "mp": "medidas-provisorias",
+    "emenda constitucional": "emendas-constitucionais",
+    "emc": "emendas-constitucionais",
+    "ec": "emendas-constitucionais",
+    "resolucao": "resolucoes",
+    "portaria": "portarias",
+}
+
+# (path, block) -> aliases
+CONSTITUTION_ALIASES: dict[tuple[str, str | None], tuple[str, ...]] = {
+    ("constituicao.md", None): ("constituicao", "constituicao federal", "cf", "cf/88", "cf88", "crfb"),
+    ("constituicao.md", "transitorias"): ("adct",),
+}
+
+# (kind directory, number, year) -> aliases, all federal
+FEDERAL_LAW_ALIASES: dict[tuple[str, str, int], tuple[str, ...]] = {
+    ("leis-ordinarias", "10406", 2002): ("codigo civil", "cc", "cc/2002"),
+    ("leis-ordinarias", "13105", 2015): ("codigo de processo civil", "cpc"),
+    ("decretos-lei", "2848", 1940): ("codigo penal", "cp"),
+    ("decretos-lei", "3689", 1941): ("codigo de processo penal", "cpp"),
+    ("decretos-lei", "5452", 1943): ("clt", "consolidacao das leis do trabalho"),
+    ("leis-ordinarias", "8078", 1990): ("cdc", "codigo de defesa do consumidor"),
+    ("leis-ordinarias", "8245", 1991): ("lei do inquilinato", "inquilinato", "lei de locacoes"),
+    ("leis-ordinarias", "9099", 1995): ("lei dos juizados especiais", "lei dos juizados", "juizados especiais"),
+    ("leis-ordinarias", "10259", 2001): ("lei dos juizados especiais federais",),
+    ("leis-ordinarias", "5172", 1966): ("ctn", "codigo tributario nacional"),
+    ("leis-ordinarias", "8069", 1990): ("eca", "estatuto da crianca e do adolescente"),
+    ("leis-ordinarias", "10741", 2003): ("estatuto do idoso", "estatuto da pessoa idosa"),
+    ("leis-ordinarias", "13709", 2018): ("lgpd", "lei geral de protecao de dados"),
+    ("leis-ordinarias", "12965", 2014): ("marco civil da internet",),
+    ("leis-ordinarias", "11340", 2006): ("lei maria da penha", "maria da penha"),
+    ("leis-ordinarias", "14133", 2021): ("nova lei de licitacoes", "lei de licitacoes"),
+    ("leis-ordinarias", "8429", 1992): ("lei de improbidade administrativa",),
+    ("leis-ordinarias", "9503", 1997): ("codigo de transito brasileiro", "ctb"),
+    ("leis-ordinarias", "11343", 2006): ("lei de drogas",),
+    ("leis-ordinarias", "7210", 1984): ("lei de execucao penal", "lep"),
+    ("leis-ordinarias", "11101", 2005): ("lei de falencias",),
+    ("decretos-lei", "4657", 1942): ("lindb", "lei de introducao as normas do direito brasileiro"),
+    ("leis-ordinarias", "8906", 1994): ("estatuto da oab",),
+    ("leis-ordinarias", "12016", 2009): ("lei do mandado de seguranca",),
+    ("leis-ordinarias", "7347", 1985): ("lei da acao civil publica",),
+    ("leis-ordinarias", "10257", 2001): ("estatuto da cidade",),
+    ("leis-ordinarias", "12651", 2012): ("codigo florestal",),
+    ("leis-ordinarias", "12527", 2011): ("lei de acesso a informacao", "lai"),
+    ("leis-complementares", "101", 2000): ("lei de responsabilidade fiscal", "lrf"),
+    ("leis-complementares", "123", 2006): ("estatuto da microempresa", "simples nacional"),
+    ("leis-ordinarias", "12846", 2013): ("lei anticorrupcao",),
+    ("leis-ordinarias", "9307", 1996): ("lei de arbitragem",),
+    ("leis-ordinarias", "10826", 2003): ("estatuto do desarmamento",),
+    ("leis-ordinarias", "13146", 2015): ("estatuto da pessoa com deficiencia", "lbi"),
+    ("leis-ordinarias", "4737", 1965): ("codigo eleitoral",),
+    ("leis-ordinarias", "13869", 2019): ("lei de abuso de autoridade",),
+}
