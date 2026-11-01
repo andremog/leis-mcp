@@ -1,20 +1,23 @@
 <div align="center">
 
-<img src="docs/banner.jpg" alt="§ leis-mcp: a lei exata, direto no seu assistente de IA" width="820">
+<img src="https://github.com/mazulo/leis-mcp/raw/main/docs/banner.jpg" alt="§ leis-mcp: a lei exata, direto no seu assistente de IA" width="820">
 
 ### Busque e cite o texto oficial de mais de 1,2 milhão de normas brasileiras sem sair do seu assistente.
 
+[![PyPI](https://img.shields.io/pypi/v/leis-mcp?color=f2b84b&logo=pypi&logoColor=white)](https://pypi.org/project/leis-mcp/)
+[![CI](https://github.com/mazulo/leis-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/mazulo/leis-mcp/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![MCP](https://img.shields.io/badge/MCP-stdio%20%C2%B7%20HTTP-f2b84b)](https://modelcontextprotocol.io/)
 [![Normas](https://img.shields.io/badge/normas-1.218.990-43d39e)](https://github.com/ctresb/leis)
 [![uv](https://img.shields.io/badge/uv-ready-DE5FE9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](#docker)
+[![License: MIT](https://img.shields.io/badge/license-MIT-8d97ad)](https://github.com/mazulo/leis-mcp/blob/main/LICENSE)
 
 [Início rápido](#início-rápido) · [Ferramentas](#ferramentas) · [Clientes](#clientes) · [Como funciona](#como-funciona) · [Limitações](#limitações)
 
 <br>
 
-<a href="https://gist.github.com/user-attachments/assets/d19cb5e2-fcf0-48f7-a5db-8e6663d1ac0f"><img src="docs/demo.jpg" alt="Demonstração do leis-mcp em vídeo (25 s): o assistente devolve o texto exato da Lei do Inquilinato, art. 23, III" width="820"></a>
+<a href="https://gist.github.com/user-attachments/assets/d19cb5e2-fcf0-48f7-a5db-8e6663d1ac0f"><img src="https://github.com/mazulo/leis-mcp/raw/main/docs/demo.jpg" alt="Demonstração do leis-mcp em vídeo (25 s): o assistente devolve o texto exato da Lei do Inquilinato, art. 23, III" width="820"></a>
 
 <sub>Clique na imagem para ver a demonstração (25 s, com música).</sub>
 
@@ -43,19 +46,29 @@ ler_artigo("8245/1991", "23", inciso="III")
 
 ## Início rápido
 
-Requisitos: Python 3.12+, [uv](https://docs.astral.sh/uv/) e git. O [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) é recomendado.
+Requisitos: [uv](https://docs.astral.sh/uv/) e git. O [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) é recomendado.
 
 ```bash
-git clone https://github.com/mazulo/leis-mcp && cd leis-mcp
-uv sync
-uv run leis-mcp index                                        # clone leve + índice (~1 min na primeira vez)
-claude mcp add leis -- uv --directory "$PWD" run leis-mcp serve
+uvx leis-mcp index                          # clone leve + índice (~1 min na primeira vez)
+claude mcp add leis -- uvx leis-mcp serve
 ```
 
 Pronto. Pergunte ao Claude: *"O inquilino é obrigado a devolver o imóvel como recebeu? Cite a lei."*
 
 > [!TIP]
-> `uv run leis-mcp warm` pré-carrega as ~40 normas dos apelidos, para que `buscar_texto` sem `norma` já tenha onde procurar.
+> `uvx leis-mcp warm` pré-carrega as ~40 normas dos apelidos, para que `buscar_texto` sem `norma` já tenha onde procurar.
+
+<details>
+<summary><b>A partir do código-fonte</b></summary>
+
+```bash
+git clone https://github.com/mazulo/leis-mcp && cd leis-mcp
+uv sync
+uv run leis-mcp index
+claude mcp add leis -- uv --directory "$PWD" run leis-mcp serve
+```
+
+</details>
 
 ## Ferramentas
 
@@ -112,7 +125,7 @@ Pronto. Pergunte ao Claude: *"O inquilino é obrigado a devolver o imóvel como 
 ### Claude Code
 
 ```bash
-claude mcp add leis -- uv --directory /caminho/para/leis-mcp run leis-mcp serve
+claude mcp add leis -- uvx leis-mcp serve
 ```
 
 Use `-s user` para disponibilizar em todos os projetos e `-s project` para gravar em `.mcp.json`.
@@ -125,14 +138,14 @@ Em `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`)
 {
   "mcpServers": {
     "leis": {
-      "command": "uv",
-      "args": ["--directory", "/caminho/para/leis-mcp", "run", "leis-mcp", "serve"]
+      "command": "uvx",
+      "args": ["leis-mcp", "serve"]
     }
   }
 }
 ```
 
-Se o Desktop não achar o `uv`, use o caminho absoluto (`which uv`).
+Se o Desktop não achar o `uvx`, use o caminho absoluto (`which uvx`).
 
 ### Docker
 
@@ -155,7 +168,7 @@ No Claude Desktop, troque o comando por `"command": "docker", "args": ["compose"
 ### HTTP
 
 ```bash
-uv run leis-mcp serve --transport streamable-http --port 8000   # servido em /mcp
+uvx leis-mcp serve --transport streamable-http --port 8000      # servido em /mcp
 claude mcp add --transport http leis http://localhost:8000/mcp
 ```
 
@@ -214,14 +227,16 @@ O código é em inglês; só o que chega ao usuário (respostas, erros, descriç
 
 ## CLI
 
+Rode com `uvx leis-mcp <comando>` ou, no código-fonte, com `uv run leis-mcp <comando>`:
+
 ```bash
-uv run leis-mcp index                         # clone leve + índice
-uv run leis-mcp update                        # git fetch + reindexação
-uv run leis-mcp status                        # commit indexado, total, itens em cache
-uv run leis-mcp warm                          # pré-carrega as leis dos apelidos
-uv run leis-mcp warm --no-aliases --sphere federal --kind leis-complementares
-uv run leis-mcp read "Lei 8.245/91" 23 -c III # testa sem cliente MCP (-p parágrafo, -c inciso, -s alínea, -b bloco)
-uv run leis-mcp serve                         # stdio (padrão)
+leis-mcp index                         # clone leve + índice
+leis-mcp update                        # git fetch + reindexação
+leis-mcp status                        # commit indexado, total, itens em cache
+leis-mcp warm                          # pré-carrega as leis dos apelidos
+leis-mcp warm --no-aliases --sphere federal --kind leis-complementares
+leis-mcp read "Lei 8.245/91" 23 -c III # testa sem cliente MCP (-p parágrafo, -c inciso, -s alínea, -b bloco)
+leis-mcp serve                         # stdio (padrão)
 ```
 
 Se o índice não existir, `serve` gera o índice antes de iniciar. Ainda assim, rode `index` antes para o cliente não esperar.
