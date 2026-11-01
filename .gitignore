@@ -12,3 +12,6 @@ dist/
 # Demo video project: sources, audio and renders stay local
 docs/leis-mcp-demo/
 *.mp4
+
+# macOS
+.DS_Store
