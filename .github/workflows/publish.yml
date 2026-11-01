@@ -4,13 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version (defaults to pyproject.toml; must match it)
+        description: "Version (optional): leave empty to use pyproject.toml"
         required: false
-      target:
-        description: "testpypi: rehearse on TestPyPI only. pypi: TestPyPI, then PyPI, tag and GitHub release."
-        type: choice
-        options: [pypi, testpypi]
-        default: pypi
+        type: string
+      testpypi:
+        description: Publish to TestPyPI
+        type: boolean
+        default: true
+      pypi:
+        description: Publish to PyPI, then tag and create the GitHub release
+        type: boolean
+        default: true
 
 concurrency:
   group: release
@@ -31,6 +35,12 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: |
           echo "::error::Releases run from main only (got ${{ github.ref }})"
+          exit 1
+
+      - name: Require a target
+        if: ${{ !inputs.testpypi && !inputs.pypi }}
+        run: |
+          echo "::error::Select TestPyPI, PyPI or both"
           exit 1
 
       - uses: actions/checkout@v4
@@ -84,6 +94,7 @@ jobs:
 
   testpypi:
     name: Publish to TestPyPI
+    if: inputs.testpypi
     needs: [meta, build]
     runs-on: ubuntu-latest
     environment:
@@ -106,8 +117,12 @@ jobs:
 
   pypi:
     name: Publish to PyPI
-    if: inputs.target == 'pypi'
-    needs: [meta, testpypi]
+    # Runs after TestPyPI when both are selected, and on its own when TestPyPI is unchecked.
+    if: >-
+      !cancelled() && inputs.pypi
+      && needs.build.result == 'success'
+      && contains(fromJSON('["success", "skipped"]'), needs.testpypi.result)
+    needs: [meta, build, testpypi]
     runs-on: ubuntu-latest
     environment:
       name: pypi
