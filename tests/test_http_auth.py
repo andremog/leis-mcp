@@ -5,8 +5,9 @@ from unittest.mock import Mock
 import pytest
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
-from starlette.routing import Route
+from starlette.routing import Route, WebSocketRoute
 from starlette.testclient import TestClient
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from leis_mcp.config import Settings, default_host, default_port
 from leis_mcp.server import LeisServer
@@ -107,3 +108,25 @@ def test_host_and_port_defaults(monkeypatch):
     assert (default_host(), default_port()) == ("0.0.0.0", 4321)
     monkeypatch.setenv("LEIS_MCP_PORT", "9000")
     assert default_port() == 9000
+
+
+async def _ws(websocket: WebSocket):
+    await websocket.accept()
+    await websocket.send_text("inner")
+    await websocket.close()
+
+
+def ws_client(api_key: str | None) -> TestClient:
+    inner = Starlette(routes=[WebSocketRoute("/mcp", _ws)])
+    return TestClient(ApiKeyMiddleware(inner, api_key))
+
+
+def test_with_key_websocket_without_header_is_closed():
+    with pytest.raises(WebSocketDisconnect) as excinfo, ws_client(KEY).websocket_connect("/mcp"):
+        pass
+    assert excinfo.value.code == 1008
+
+
+def test_with_key_websocket_with_header_passes():
+    with ws_client(KEY).websocket_connect("/mcp", headers={"authorization": f"Bearer {KEY}"}) as ws:
+        assert ws.receive_text() == "inner"

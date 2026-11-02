@@ -26,7 +26,13 @@ class ApiKeyMiddleware:
         self._expected = f"Bearer {api_key}".encode() if api_key else None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
+        if scope["type"] == "websocket":  # the MCP transport has no websocket route: fail closed, never pass through
+            if self._expected is not None and not self._authorized(scope):
+                await send({"type": "websocket.close", "code": 1008})
+                return
+            await self._app(scope, receive, send)
+            return
+        if scope["type"] != "http":  # lifespan
             await self._app(scope, receive, send)
             return
         if scope.get("path") == HEALTH_PATH and scope.get("method") in ("GET", "HEAD"):
