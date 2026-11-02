@@ -172,6 +172,44 @@ uvx leis-mcp serve --transport streamable-http --port 8000      # servido em /mc
 claude mcp add --transport http leis http://localhost:8000/mcp
 ```
 
+Com `LEIS_MCP_API_KEY` definida, toda requisição ao `/mcp` precisa do cabeçalho `Authorization: Bearer <chave>`; sem ele, a resposta é `401`. `GET /health` fica sempre aberto, para o health check da plataforma. Sem a variável, nada muda. A porta padrão vem de `LEIS_MCP_PORT` ou `PORT`, e o host de `LEIS_MCP_HOST` (a imagem Docker usa `0.0.0.0`).
+
+### Deploy no Railway
+
+O `railway.json` usa o `Dockerfile` e sobe o servidor HTTP com health check em `/health`.
+
+1. Crie um serviço a partir do repositório no GitHub.
+2. Adicione um volume montado em `/data` (é o `LEIS_MCP_HOME` da imagem). Reserve ~1 GB: clone leve (~250 MB), índice (~350 MB) e cache.
+3. Variáveis do serviço:
+   - `LEIS_MCP_API_KEY`: uma chave longa e aleatória (por exemplo, `python -c "import secrets; print(secrets.token_urlsafe(32))"`).
+   - `LEIS_MCP_WARM_ON_START=1` (opcional): pré-carrega os apelidos em segundo plano a cada início.
+   - O `PORT` é definido pelo Railway.
+4. Em *Networking*, gere um domínio público. O endpoint fica em `https://<app>.up.railway.app/mcp`.
+
+No primeiro deploy o índice é montado no volume (cerca de 1 a 2 minutos) antes de o servidor responder; nos seguintes ele já existe. Para atualizar o acervo, rode `leis-mcp update` no serviço (por exemplo, via `railway ssh`).
+
+No Claude Code (inclusive na web, pelo `.mcp.json` do repositório):
+
+```bash
+claude mcp add --transport http leis https://<app>.up.railway.app/mcp --header "Authorization: Bearer <chave>"
+```
+
+```json
+{
+  "mcpServers": {
+    "leis": {
+      "type": "http",
+      "url": "https://<app>.up.railway.app/mcp",
+      "headers": { "Authorization": "Bearer ${LEIS_MCP_API_KEY}" }
+    }
+  }
+}
+```
+
+No `.mcp.json` versionado, use a referência `${LEIS_MCP_API_KEY}` e nunca a chave em si.
+
+No Claude.ai, em *Configurações > Conectores > Adicionar conector personalizado*, informe a URL e, em *Request headers*, o cabeçalho `Authorization` com o valor `Bearer <chave>` (com o espaço). Esse recurso está em beta e só aparece para algumas organizações; sem ele, o Claude.ai aceita apenas OAuth ou servidor sem autenticação, e o leis-mcp não aceita a chave na URL.
+
 ## Como funciona
 
 ```mermaid
