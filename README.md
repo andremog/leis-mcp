@@ -194,10 +194,10 @@ O `fly.toml` usa o `Dockerfile`, roda `leis-mcp serve --transport streamable-htt
    # alternativa: fly launch --no-deploy --copy-config (reaproveita este fly.toml)
    ```
 
-3. Crie o volume de 1 GB na mesma região (clone leve ~250 MB + índice ~350 MB):
+3. Crie o volume na mesma região. Clone leve (~250 MB) e índice (~350 MB) caberiam em 1 GB, mas o `leis-mcp update` monta o índice novo ao lado do antigo antes de trocar, então use 2 GB (cerca de US$ 0,15 por GB/mês):
 
    ```bash
-   fly volumes create leis_data --region gru --size 1
+   fly volumes create leis_data --region gru --size 2
    ```
 
 4. Gere a chave e grave só como segredo do Fly (não vai para o `fly.toml`, nem para o repositório). O valor passa pela entrada padrão, sem aparecer na linha de comando:

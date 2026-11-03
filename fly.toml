@@ -25,12 +25,13 @@ primary_region = "gru" # São Paulo
   app = "serve --transport streamable-http"
 
 # Volume criado antes do primeiro deploy:
-#   fly volumes create leis_data --region gru --size 1
-# Clone leve (~250 MB) + índice (~350 MB) cabem em 1 GB.
+#   fly volumes create leis_data --region gru --size 2
+# Clone leve (~250 MB) + índice (~350 MB) + cache. 2 GB porque `leis-mcp update`
+# monta o índice novo (index.tmp, ~350 MB) ao lado do antigo antes de trocar.
 [mounts]
   source = "leis_data"
   destination = "/data"
-  initial_size = "1gb"
+  initial_size = "2gb"
   processes = ["app"]
 
 [http_service]
