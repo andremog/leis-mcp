@@ -6,3 +6,7 @@
 **/__pycache__
 tests
 .claude
+.env
+.env.*
+*.mp4
+docs/leis-mcp-demo

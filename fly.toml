@@ -1,0 +1,66 @@
+# Deploy do leis-mcp no Fly.io (ver "Deploy no Fly.io" no README).
+#
+# O nome do app vira o subdomínio (https://<app>.fly.dev) e precisa ser único
+# em todo o Fly.io: troque se "leis-mcp-andremog" já estiver em uso.
+app = "leis-mcp-andremog"
+primary_region = "gru" # São Paulo
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  # O primeiro início monta o índice no volume antes de abrir a porta.
+  wait_timeout = "15m"
+
+[env]
+  LEIS_MCP_HOME = "/data"
+  LEIS_MCP_HOST = "0.0.0.0"
+  LEIS_MCP_PORT = "8000"
+  LEIS_MCP_WARM_ON_START = "1"
+  # LEIS_MCP_API_KEY é segredo: `fly secrets set`, nunca aqui.
+
+# O ENTRYPOINT da imagem é `leis-mcp`; o comando do processo substitui só o CMD,
+# então a máquina roda `leis-mcp serve --transport streamable-http`.
+[processes]
+  app = "serve --transport streamable-http"
+
+# Volume criado antes do primeiro deploy:
+#   fly volumes create leis_data --region gru --size 1
+# Clone leve (~250 MB) + índice (~350 MB) cabem em 1 GB.
+[mounts]
+  source = "leis_data"
+  destination = "/data"
+  initial_size = "1gb"
+  processes = ["app"]
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Economia: a máquina para quando fica ociosa e volta na próxima requisição
+  # (alguns segundos a mais nessa primeira chamada). Para resposta sempre
+  # imediata, use auto_stop_machines = "off" e min_machines_running = 1.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 25
+
+  # /health é aberto (sem chave). No primeiro início o índice é montado no
+  # volume antes de a porta abrir (~30 s na box, alguns minutos numa máquina
+  # compartilhada). Falhas dentro do wait_timeout do deploy só geram novas
+  # tentativas; uma carência de 10 min atrasaria todo deploy, não só o primeiro.
+  [[http_service.checks]]
+    grace_period = "120s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/health"
+
+# A montagem do índice chega a ~360 MB de RAM; 256 MB não bastam.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
