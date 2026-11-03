@@ -172,6 +172,88 @@ uvx leis-mcp serve --transport streamable-http --port 8000      # servido em /mc
 claude mcp add --transport http leis http://localhost:8000/mcp
 ```
 
+Com `LEIS_MCP_API_KEY` definida, toda requisição ao `/mcp` precisa do cabeçalho `Authorization: Bearer <chave>`; sem ele, a resposta é `401`. `GET /health` fica sempre aberto, para o health check da plataforma. Sem a variável, nada muda. A porta padrão vem de `LEIS_MCP_PORT` ou `PORT`, e o host de `LEIS_MCP_HOST` (a imagem Docker usa `0.0.0.0`).
+
+### Deploy no Fly.io
+
+O `fly.toml` usa o `Dockerfile`, roda `leis-mcp serve --transport streamable-http` na porta interna 8000, guarda clone e índice num volume em `/data` e faz health check em `GET /health`. Região padrão: `gru` (São Paulo).
+
+> **Importante:** sem `LEIS_MCP_API_KEY` o servidor sobe **aberto** (só um aviso no log). Defina o segredo **antes** do primeiro deploy.
+
+1. Instale o `flyctl` e entre na conta:
+
+   ```bash
+   curl -L https://fly.io/install.sh | sh
+   fly auth login            # ou exporte FLY_API_TOKEN
+   ```
+
+2. Crie o app sem fazer deploy. O nome em `app` no `fly.toml` vira `https://<app>.fly.dev` e precisa ser único no Fly.io; troque `leis-mcp-andremog` se já existir.
+
+   ```bash
+   fly apps create leis-mcp-andremog
+   # alternativa: fly launch --no-deploy --copy-config (reaproveita este fly.toml)
+   ```
+
+3. Crie o volume na mesma região. Clone leve (~250 MB) e índice (~350 MB) caberiam em 1 GB, mas o `leis-mcp update` monta o índice novo ao lado do antigo antes de trocar, então use 2 GB (cerca de US$ 0,15 por GB/mês):
+
+   ```bash
+   fly volumes create leis_data --region gru --size 2
+   ```
+
+4. Gere a chave e grave só como segredo do Fly (não vai para o `fly.toml`, nem para o repositório). O valor passa pela entrada padrão, sem aparecer na linha de comando:
+
+   ```bash
+   export LEIS_MCP_API_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+   printf 'LEIS_MCP_API_KEY=%s\n' "$LEIS_MCP_API_KEY" | fly secrets import
+   ```
+
+   Guarde a chave num gerenciador de senhas antes de fechar o terminal: o Fly não mostra o valor de volta (`fly secrets list` só lista os nomes).
+
+5. Faça o deploy:
+
+   ```bash
+   fly deploy
+   ```
+
+   No primeiro início o índice é montado no volume antes de a porta abrir (de 1 a alguns minutos); o `fly.toml` dá até 15 min ao deploy. Nos inícios seguintes o índice já existe.
+
+6. Teste:
+
+   ```bash
+   curl -i https://<app>.fly.dev/health                       # 200, sem chave
+   curl -i -X POST https://<app>.fly.dev/mcp                  # 401, sem chave
+   curl -i -X POST https://<app>.fly.dev/mcp \
+     -H "Authorization: Bearer $LEIS_MCP_API_KEY" \
+     -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'   # 200
+   ```
+
+Custo e tempo de resposta: o `fly.toml` usa `auto_stop_machines = "stop"` e `min_machines_running = 0`, então a máquina (shared-cpu-1x, 512 MB, porque a montagem do índice passa de 256 MB) para quando fica ociosa e você paga basicamente o volume. A primeira chamada depois de uma pausa leva alguns segundos a mais, e o cliente MCP pode precisar reconectar, porque a sessão fica na memória do processo. Para resposta sempre imediata, troque para `auto_stop_machines = "off"` e `min_machines_running = 1` (máquina ligada o mês todo).
+
+Para atualizar o acervo, com a máquina ligada (faça uma chamada a `/health` antes, se ela estiver parada), rode `fly ssh console -C "leis-mcp update"` e depois `fly apps restart <app>`: o processo em execução mantém o índice antigo aberto até reiniciar. Para trocar a chave, repita o passo 4; o Fly reinicia a máquina com o novo valor.
+
+No Claude Code (inclusive na web, pelo `.mcp.json` do repositório):
+
+```bash
+claude mcp add --transport http leis https://<app>.fly.dev/mcp --header "Authorization: Bearer <chave>"
+```
+
+```json
+{
+  "mcpServers": {
+    "leis": {
+      "type": "http",
+      "url": "https://<app>.fly.dev/mcp",
+      "headers": { "Authorization": "Bearer ${LEIS_MCP_API_KEY}" }
+    }
+  }
+}
+```
+
+No `.mcp.json` versionado, use a referência `${LEIS_MCP_API_KEY}` e nunca a chave em si.
+
+No Claude.ai, em *Configurações > Conectores > Adicionar conector personalizado*, informe a URL e, em *Request headers*, o cabeçalho `Authorization` com o valor `Bearer <chave>` (com o espaço). Esse recurso está em beta e só aparece para algumas organizações; sem ele, o Claude.ai aceita apenas OAuth ou servidor sem autenticação, e o leis-mcp não aceita a chave na URL.
+
 ## Como funciona
 
 ```mermaid

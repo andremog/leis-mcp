@@ -13,8 +13,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY src ./src
 RUN uv sync --frozen --no-dev
 
-ENV PATH="/app/.venv/bin:$PATH" LEIS_MCP_HOME=/data PYTHONUNBUFFERED=1
-VOLUME ["/data"]
+ENV PATH="/app/.venv/bin:$PATH" LEIS_MCP_HOME=/data LEIS_MCP_HOST=0.0.0.0 PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["leis-mcp"]
 CMD ["serve"]

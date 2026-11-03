@@ -1,6 +1,7 @@
 """MCP server (official SDK `MCPServer`, formerly FastMCP) exposing the legislation tools."""
 
 import functools
+import logging
 from collections.abc import Callable
 from typing import Annotated, Any
 
@@ -13,6 +14,9 @@ from .. import messages
 from ..config import DEFAULT_HOST, DEFAULT_PORT, Transport
 from ..errors import LeisMcpError
 from ..services.legislation import LegislationService
+from .http import ApiKeyMiddleware
+
+log = logging.getLogger(__name__)
 
 
 class LeisServer:
@@ -53,9 +57,25 @@ class LeisServer:
             description="Apelidos de leis aceitos pelas ferramentas.",
         )(self.aliases)
 
-    def run(self, transport: Transport = "stdio", host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
-        options = {"stdio": {}, "streamable-http": {"host": host, "port": port}}
-        self.mcp.run(transport, **options[transport])
+    def run(
+        self,
+        transport: Transport = "stdio",
+        host: str = DEFAULT_HOST,
+        port: int = DEFAULT_PORT,
+        api_key: str | None = None,
+    ) -> None:
+        if transport == "stdio":
+            self.mcp.run("stdio")
+            return
+        import uvicorn
+
+        if not api_key and host not in ("127.0.0.1", "localhost", "::1"):
+            log.warning("LEIS_MCP_API_KEY is not set: the HTTP endpoint on %s is open to anyone.", host)
+        uvicorn.run(self.http_app(host, api_key), host=host, port=port, log_level="info")
+
+    def http_app(self, host: str = DEFAULT_HOST, api_key: str | None = None) -> ApiKeyMiddleware:
+        """Streamable HTTP app (`/mcp`) wrapped with the optional key check and the open `/health`."""
+        return ApiKeyMiddleware(self.mcp.streamable_http_app(host=host), api_key)
 
     def find_norm(
         self,
