@@ -1,0 +1,54 @@
+{
+  "manifest_version": "0.4",
+  "name": "leis-mcp",
+  "display_name": "Leis do Brasil",
+  "version": "0.1.0",
+  "description": "Busca e cita o texto oficial de mais de 1,2 milhão de normas brasileiras, com a fonte e os avisos de revogação.",
+  "long_description": "Dá ao Claude acesso à legislação brasileira do repositório público [ctresb/leis](https://github.com/ctresb/leis): Constituição, códigos, leis, decretos e normas estaduais, municipais e de reguladores. Em vez de parafrasear de memória, o Claude localiza a norma, lê o artigo, parágrafo, inciso ou alínea e cita o texto exato, com o link oficial.\n\nNa primeira vez, a extensão baixa um índice de cerca de 100 MB; as perguntas feitas nesse intervalo recebem um aviso para tentar de novo em instantes. O texto vem de conversão automática das fontes oficiais e não substitui o Diário Oficial.",
+  "author": {
+    "name": "Patrick Mazulo",
+    "url": "https://github.com/mazulo"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mazulo/leis-mcp"
+  },
+  "homepage": "https://github.com/mazulo/leis-mcp",
+  "documentation": "https://github.com/mazulo/leis-mcp#readme",
+  "support": "https://github.com/mazulo/leis-mcp/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "uv",
+    "entry_point": "src/leis_mcp/__main__.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "--frozen", "--no-dev", "leis-mcp", "serve"]
+    }
+  },
+  "tools": [
+    {
+      "name": "buscar_norma",
+      "description": "Localiza uma norma por número, ano ou apelido (CLT, CDC, código civil) e devolve os metadados e o link oficial."
+    },
+    {
+      "name": "ler_artigo",
+      "description": "Devolve o texto exato de um artigo, parágrafo, inciso ou alínea, com o caput, a fonte e os avisos."
+    },
+    {
+      "name": "buscar_texto",
+      "description": "Procura uma palavra ou trecho numa norma e indica o artigo de cada ocorrência."
+    },
+    {
+      "name": "listar_normas",
+      "description": "Navega pelo acervo por esfera, tipo, UF ou órgão e ano."
+    }
+  ],
+  "keywords": ["legislação", "leis", "brasil", "direito", "constituição", "clt", "cdc", "lgpd"],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "python": ">=3.12"
+    }
+  }
+}

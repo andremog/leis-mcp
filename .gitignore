@@ -5,6 +5,7 @@ __pycache__/
 .memsearch/
 *.egg-info/
 dist/
+dist-mcpb/
 
 # Local agent notes (lessons, todo)
 .claude/

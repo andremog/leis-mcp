@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mazulo/leis-mcp",
+  "title": "Leis do Brasil",
+  "description": "Busca e cita o texto oficial de mais de 1,2 milhão de normas brasileiras (ctresb/leis).",
+  "repository": {
+    "url": "https://github.com/mazulo/leis-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/mazulo/leis-mcp#readme",
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "leis-mcp",
+      "version": "0.1.0",
+      "runtimeHint": "uvx",
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "serve"
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
