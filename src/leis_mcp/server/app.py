@@ -12,7 +12,7 @@ from pydantic import Field
 from .. import messages
 from ..config import DEFAULT_HOST, DEFAULT_PORT, Transport
 from ..errors import LeisMcpError
-from ..services.legislation import LegislationService
+from ..services import LegislationService, ServiceProvider
 
 
 class LeisServer:
@@ -34,8 +34,8 @@ class LeisServer:
         "por ano; com ano, lista as normas.",
     }
 
-    def __init__(self, service: LegislationService):
-        self._service = service
+    def __init__(self, services: ServiceProvider):
+        self._services = services
         self.mcp = MCPServer("leis-brasil", instructions=messages.SERVER_INSTRUCTIONS)
         handlers = {
             "buscar_norma": self.find_norm,
@@ -52,6 +52,10 @@ class LeisServer:
             mime_type="application/json",
             description="Apelidos de leis aceitos pelas ferramentas.",
         )(self.aliases)
+
+    @property
+    def _service(self) -> LegislationService:
+        return self._services.get()
 
     def run(self, transport: Transport = "stdio", host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
         options = {"stdio": {}, "streamable-http": {"host": host, "port": port}}

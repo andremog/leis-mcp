@@ -7,6 +7,7 @@ from typing import Literal, Self
 
 REPO_URL = "https://github.com/ctresb/leis"
 RAW_BASE_URL = "https://raw.githubusercontent.com/ctresb/leis"
+INDEX_URL = "https://github.com/mazulo/leis-mcp/releases/download/index"
 DEFAULT_BRANCH = "main"
 DEFAULT_HOME = Path.home() / ".cache" / "leis-mcp"
 CONSTITUTION_PATH = "constituicao.md"
@@ -23,6 +24,7 @@ class Settings:
     repo_url: str = REPO_URL
     raw_base_url: str = RAW_BASE_URL
     branch: str = DEFAULT_BRANCH
+    index_url: str = INDEX_URL
 
     @property
     def repo_dir(self) -> Path:
@@ -48,4 +50,5 @@ class Settings:
             repo_url=os.environ.get("LEIS_MCP_REPO_URL", REPO_URL),
             raw_base_url=os.environ.get("LEIS_MCP_RAW_BASE", RAW_BASE_URL),
             branch=os.environ.get("LEIS_MCP_BRANCH", DEFAULT_BRANCH),
+            index_url=os.environ.get("LEIS_MCP_INDEX_URL", INDEX_URL),
         )

@@ -14,8 +14,10 @@ from urllib.parse import quote
 
 import httpx
 
+from .. import messages
 from ..catalog.git_repository import GitRepository
 from ..config import Settings
+from ..errors import ContentUnavailableError
 from ..models import Norm
 
 log = logging.getLogger(__name__)
@@ -71,7 +73,11 @@ class ContentStore:
 
     def _download(self, norm: Norm) -> bytes:
         data = self._fetch_raw(norm)
-        return self._repository.read_blob(norm.blob) if data is None else data
+        if data is not None:
+            return data
+        if not self._repository.exists:  # index downloaded as a snapshot: there is no clone to fall back on
+            raise ContentUnavailableError(messages.CONTENT_UNAVAILABLE.format(path=norm.path))
+        return self._repository.read_blob(norm.blob)
 
     def _fetch_raw(self, norm: Norm) -> bytes | None:
         url = f"{self._raw_base_url}/{self._commit}/{quote(norm.path)}"
