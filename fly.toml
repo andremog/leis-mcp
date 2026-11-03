@@ -53,9 +53,9 @@ primary_region = "gru" # São Paulo
   # /health é aberto (sem chave). No primeiro início o índice é montado no
   # volume antes de a porta abrir (~30 s na box, alguns minutos numa máquina
   # compartilhada). Falhas dentro do wait_timeout do deploy só geram novas
-  # tentativas; uma carência de 10 min atrasaria todo deploy, não só o primeiro.
+  # tentativas. O Fly limita a carência a 1 min.
   [[http_service.checks]]
-    grace_period = "120s"
+    grace_period = "60s"
     interval = "30s"
     timeout = "5s"
     method = "GET"
