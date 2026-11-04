@@ -1,6 +1,6 @@
 [project]
 name = "leis-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Servidor MCP para buscar e citar a legislação brasileira do repositório ctresb/leis"
 readme = "README.md"
 license = "MIT"
