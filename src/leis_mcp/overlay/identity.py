@@ -13,11 +13,27 @@ from .store_errors import OverlayError  # noqa: F401 - re-exported for callers t
 
 _VERSION = re.compile(r"^p-[0-9a-f]{20}$")
 _SEGMENT = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+_CANONICAL = re.compile(r"^br:federal:[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*:[1-9]\d*:\d{4}$")
+
+
+def require_canonical(value: object) -> str:
+    """Identity used in filenames. Slashes, `..` and absolute paths are rejected."""
+    if not isinstance(value, str) or not _CANONICAL.fullmatch(value):
+        raise OverlayError("Identificador canônico recusado.")
+    return value
+
+
+def provenance_basename(canonical_id: str) -> str:
+    return require_canonical(canonical_id).replace(":", "_") + ".json"
 
 
 def norm_identity(item: dict[str, Any]) -> dict[str, Any]:
+    require_canonical(item.get("canonical_id"))
+    aliases = item.get("aliases") or []
+    if not isinstance(aliases, list) or not all(isinstance(alias, str) and alias.strip() for alias in aliases):
+        raise OverlayError("Apelidos do manifesto recusados.")
     return {
-        "aliases": sorted(str(alias) for alias in item.get("aliases") or []),
+        "aliases": sorted(aliases),
         "body_sha256": str(item["body_sha256"]),
         "canonical_id": str(item["canonical_id"]),
         "date": str(item.get("date") or ""),

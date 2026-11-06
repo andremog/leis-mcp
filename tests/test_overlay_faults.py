@@ -12,7 +12,14 @@ from starlette.testclient import TestClient
 from leis_mcp.catalog.index import IndexBuilder
 from leis_mcp.config import Settings
 from leis_mcp.content.store import ContentStore
-from leis_mcp.overlay.store import OverlayError, OverlayStore, package_bundle, version_id, write_bundle
+from leis_mcp.overlay.store import (
+    OverlayError,
+    OverlayStore,
+    collection_protected,
+    package_bundle,
+    version_id,
+    write_bundle,
+)
 from leis_mcp.server import LeisServer
 from leis_mcp.services import LegislationService
 
@@ -63,6 +70,8 @@ def test_bad_hash_never_activates_and_keeps_the_healthy_version(tmp_path):
         store.activate_tree(broken, origin="manual")
     assert not (settings.overlay_dir / "active.json").exists()
     assert store.status()["ativo"] is False
+    staging = settings.overlay_dir / "staging"
+    assert list(staging.glob("*")) == [] if staging.exists() else True
 
     healthy = store.activate_tree(package_bundle(), origin="bundle")
     version = healthy.version
@@ -219,6 +228,228 @@ def test_activation_stops_when_free_space_is_below_the_tree_cap(tmp_path, monkey
     with pytest.raises(OverlayError, match="Espaço livre"):
         OverlayStore(settings).activate_tree(package_bundle(), origin="bundle")
     assert not (settings.overlay_dir / "active.json").exists()
+
+
+def test_malformed_manifest_fields_and_index_values_do_not_abort_boot(tmp_path):
+    settings = _settings(tmp_path)
+    store = OverlayStore(settings)
+    active = store.activate_tree(package_bundle(), origin="manual")
+    pointer = (settings.overlay_dir / "active.json").read_bytes()
+    manifest_path = active.root / "manifest.json"
+    original = manifest_path.read_text(encoding="utf-8")
+
+    def boot_without_overlay(corrupt) -> None:
+        manifest_path.write_text(corrupt if isinstance(corrupt, str) else json.dumps(corrupt), encoding="utf-8")
+        assert store.status()["ativo"] is False
+        service = _service(settings)
+        assert "overlay_version" not in service.status()
+        assert service.find_norms("Resolução nº 1/2002 do Congresso Nacional")["total"] == 0
+        assert (settings.overlay_dir / "active.json").read_bytes() == pointer
+        app = LeisServer(service).http_app(api_key="test-key")
+        client = TestClient(app)
+        assert client.get("/health").status_code == 200
+        assert client.post("/mcp").status_code == 401
+
+    payload = json.loads(original)
+    del payload["norms"][0]["blob"]
+    boot_without_overlay(payload)
+    payload = json.loads(original)
+    del payload["norms"][0]["provenance"]
+    boot_without_overlay(payload)
+    payload = json.loads(original)
+    payload["norms"][0]["aliases"] = "resolucao"
+    boot_without_overlay(payload)
+    payload = json.loads(original)
+    payload["norms"][0]["year"] = "dois mil"
+    boot_without_overlay(payload)
+    payload = json.loads(original)
+    payload["norms"][0]["vigencia"] = None
+    boot_without_overlay(payload)
+    payload = json.loads(original)
+    payload["norms"][0]["blob"] = "not-a-git-blob"
+    boot_without_overlay(payload)
+    manifest_path.write_text(original, encoding="utf-8")
+    with sqlite3.connect(active.db_path) as db:
+        db.execute("UPDATE meta SET value = 'nonnumeric' WHERE key = 'total'")
+        db.commit()
+    assert store.status()["ativo"] is False
+    assert _service(settings).find_norms("resolucao 1/2002-cn")["total"] == 0
+    with sqlite3.connect(active.db_path) as db:
+        db.execute("UPDATE meta SET value = 'oops' WHERE key = 'total'")
+        db.commit()
+    assert store.status()["ativo"] is False
+    assert _service(settings).find_norms("resolucao 1/2002-cn")["total"] == 0
+    with sqlite3.connect(active.db_path) as db:
+        db.execute("UPDATE meta SET value = NULL WHERE key = 'total'")
+        db.commit()
+    assert store.status()["ativo"] is False
+    manifest_path.write_text(original, encoding="utf-8")
+    (active.root / "provenance").joinpath(
+        active.manifest["norms"][0]["canonical_id"].replace(":", "_") + ".json"
+    ).write_text("{", encoding="utf-8")
+    assert store.status()["ativo"] is False
+    repaired = store.activate_tree(package_bundle(), origin="manual")
+    assert repaired.indexed_rows == 6
+    assert ART_7 in _service(settings).read_provision("resolucao 1/2002-cn", "7")["dispositivo"]["texto"]
+
+
+def test_collect_cannot_replace_an_active_snapshot_and_relative_bundle_works(tmp_path, monkeypatch):
+    settings = _settings(tmp_path)
+    store = OverlayStore(settings)
+    active = store.activate_tree(package_bundle(), origin="bundle")
+    ready = (active.root / "READY").read_bytes()
+    database = (active.root / "index.sqlite").read_bytes()
+    pointer = (settings.overlay_dir / "active.json").read_bytes()
+    protected = collection_protected(settings)
+    previous_id = "p-" + "ab" * 10
+    previous = settings.overlay_dir / "versions" / previous_id
+    shutil.copytree(active.root, previous)
+    inactive_id = "p-" + "cd" * 10
+    inactive = settings.overlay_dir / "versions" / inactive_id
+    shutil.copytree(active.root, inactive)
+    for target in (active.root, previous, inactive):
+        ready_bytes = (target / "READY").read_bytes()
+        database_bytes = (target / "index.sqlite").read_bytes()
+        with pytest.raises(OverlayError):
+            write_bundle(target, [], [], replace=True, protected=protected)
+        assert (target / "READY").read_bytes() == ready_bytes
+        assert (target / "index.sqlite").read_bytes() == database_bytes
+        assert (settings.overlay_dir / "active.json").read_bytes() == pointer
+    link = tmp_path / "linked-snapshot"
+    link.symlink_to(active.root, target_is_directory=True)
+    with pytest.raises(OverlayError):
+        write_bundle(link, [], [], replace=True, protected=protected)
+    parent_link = tmp_path / "linked-versions"
+    parent_link.symlink_to(settings.overlay_dir / "versions", target_is_directory=True)
+    with pytest.raises(OverlayError):
+        write_bundle(parent_link / active.version, [], [], replace=True, protected=protected)
+    marker = settings.home / "keep-me"
+    marker.write_text("ok", encoding="utf-8")
+    with pytest.raises(OverlayError):
+        write_bundle(settings.home.parent, [], [], replace=True, protected=protected)
+    assert marker.read_text(encoding="utf-8") == "ok"
+    assert (active.root / "READY").read_bytes() == ready
+    assert (active.root / "index.sqlite").read_bytes() == database
+    assert (settings.overlay_dir / "active.json").read_bytes() == pointer
+
+    monkeypatch.chdir(tmp_path)
+    relative = _tiny_package(Path("relative-bundle"), sentence="Texto do pacote relativo.")
+    assert (tmp_path / "relative-bundle" / "manifest.json").is_file()
+    assert relative == Path("relative-bundle") or (tmp_path / "relative-bundle").exists()
+    write_bundle(
+        Path("relative-bundle"), _norms_from(tmp_path / "relative-bundle", "Texto substituído."), [], replace=True
+    )
+    assert "Texto substituído." in (tmp_path / "relative-bundle" / "norms").rglob(
+        "*.md"
+    ).__iter__().__next__().read_text(encoding="utf-8")
+
+
+def test_canonical_id_and_versions_symlink_do_not_write_outside(tmp_path):
+    settings = _settings(tmp_path)
+    outside = tmp_path / "outside-provenance.json"
+    planted = tmp_path / "bad-id"
+    shutil.copytree(package_bundle(), planted)
+    manifest = json.loads((planted / "manifest.json").read_text(encoding="utf-8"))
+    manifest["norms"][0]["canonical_id"] = str(outside)
+    (planted / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(OverlayError):
+        OverlayStore(settings).activate_tree(planted, origin="manual")
+    assert not outside.exists()
+    norms = _norms_from(tmp_path / "unused", "Texto interno.")
+    norms[0]["canonical_id"] = str(outside)
+    norms[0]["provenance"]["canonical_id"] = str(outside)
+    with pytest.raises(OverlayError):
+        write_bundle(tmp_path / "escaped-bundle", norms, [])
+    assert not outside.exists()
+    assert not (tmp_path / "escaped-bundle").exists()
+
+    external = tmp_path / "external-versions"
+    external.mkdir()
+    versions = settings.overlay_dir / "versions"
+    versions.mkdir(parents=True, exist_ok=True)
+    if versions.exists() and not versions.is_symlink():
+        shutil.rmtree(versions)
+    versions.symlink_to(external, target_is_directory=True)
+    with pytest.raises(OverlayError):
+        OverlayStore(settings).activate_tree(package_bundle(), origin="bundle")
+    assert list(external.iterdir()) == []
+    assert not (settings.overlay_dir / "active.json").exists()
+
+
+def test_renamed_version_and_duplicate_index_rows_are_unusable(tmp_path):
+    settings = _settings(tmp_path)
+    store = OverlayStore(settings)
+    active = store.activate_tree(package_bundle(), origin="manual")
+    pointer = json.loads((settings.overlay_dir / "active.json").read_text(encoding="utf-8"))
+    renamed = "p-" + "ab" * 10
+    (settings.overlay_dir / "versions" / active.version).rename(settings.overlay_dir / "versions" / renamed)
+    pointer["version"] = renamed
+    (settings.overlay_dir / "active.json").write_text(json.dumps(pointer), encoding="utf-8")
+    assert store.status()["ativo"] is False
+    with pytest.raises(OverlayError):
+        store.ensure_active()
+    assert _service(settings).find_norms("resolucao 1/2002-cn")["total"] == 0
+
+    store.activate_tree(package_bundle(), origin="manual")
+    fresh = OverlayStore(settings).ensure_active()
+    with sqlite3.connect(fresh.db_path) as db:
+        db.execute("DROP INDEX ix_path")
+        row = db.execute(
+            "SELECT path, blob, sphere, kind, year, number, date, state, city, agency FROM norms LIMIT 1"
+        ).fetchone()
+        db.execute("DELETE FROM norms")
+        db.executemany(
+            "INSERT INTO norms (path, blob, sphere, kind, year, number, date, state, city, agency) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            [row for _ in range(6)],
+        )
+        db.commit()
+    assert store.status()["ativo"] is False
+    with pytest.raises(OverlayError):
+        store.ensure_active()
+    assert _service(settings).find_norms("Resolução nº 1/2002 do Congresso Nacional")["total"] == 0
+    store.activate_tree(package_bundle(), origin="manual")
+    shifted = store.ensure_active()
+    with sqlite3.connect(shifted.db_path) as db:
+        db.execute(
+            "UPDATE norms SET path = ? WHERE rowid = (SELECT min(rowid) FROM norms)",
+            ("parlamentar/federal/congresso-nacional/resolucoes/2002/resolucao-9-2002.md",),
+        )
+        db.commit()
+    assert store.status()["ativo"] is False
+    assert _service(settings).find_norms("resolucao 1/2002-cn")["total"] == 0
+
+
+def _norms_from(directory: Path, sentence: str):
+    from leis_mcp.overlay.normalizer import html_to_markdown
+    from leis_mcp.overlay.store import built_norm
+
+    item = {
+        "canonical_id": "br:federal:congresso-nacional:resolucao:9:1999",
+        "organ": "congresso-nacional",
+        "sphere": "federal",
+        "kind": "resolucoes",
+        "type_label": "Resolução",
+        "number": "9",
+        "year": 1999,
+        "date": "1999-01-01",
+        "title": "Norma piloto",
+        "summary": "Texto de teste.",
+        "source_url": "https://www2.camara.leg.br/legin/teste.html",
+        "text_nature": "consolidado_pela_fonte",
+        "text_version": "compilada pela fonte oficial; vigência não verificada de forma independente",
+        "aliases": ["norma piloto"],
+        "expect": {"min_articles": 1},
+    }
+    html = f"<p>Art. 1º {sentence}</p>"
+    return [
+        built_norm(
+            item,
+            html_to_markdown(html),
+            raw=html.encode(),
+            fetched_at="2026-01-01T00:00:00Z",
+            final_url=item["source_url"],
+        )
+    ]
 
 
 def test_paths_symlinks_and_collect_destination_are_confined(tmp_path):

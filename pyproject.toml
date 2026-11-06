@@ -22,6 +22,7 @@ classifiers = [
     "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
+    "httpcore==1.0.9",
     "httpx>=0.28.1",
     "mcp[cli]>=2.3.0",
     "pyyaml>=6.0.3",

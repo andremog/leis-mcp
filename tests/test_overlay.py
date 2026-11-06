@@ -271,6 +271,23 @@ def test_citations_stay_intact_and_strike_crosses_articles():
         assert piece.text.startswith("~~Art.")
         assert any("tachado" in notice for notice in piece.notices)
 
+    citation = html_to_markdown("<p>Art. 1º Observe-se a regra (cf. Art. 7º desta Resolução).</p>")
+    assert "\n\nArt. 7º" not in citation
+    assert "cf. Art. 7º" in ProvisionExtractor(DocumentParser().parse(citation)).extract("1").text
+
+    partial = html_to_markdown("<div><del><p>Art. 1º Texto antigo.</p>Continuação antiga.</del> Texto vigente.</div>")
+    assert "~~Art. 1º Texto antigo.~~" in partial
+    assert "~~Continuação antiga.~~" in partial
+    assert partial.strip().endswith("Texto vigente.")
+    assert "~~Texto vigente" not in partial
+    partial_piece = ProvisionExtractor(DocumentParser().parse(partial)).extract("1")
+    assert "Continuação antiga" in partial_piece.text
+    assert any("tachado" in notice for notice in partial_piece.notices)
+
+    nested = html_to_markdown("<p><del>Art. 3º Texto <s>interno</s> final.</del></p>")
+    assert nested.count("~~") % 2 == 0
+    assert "interno" in nested and "final." in nested
+
     css = html_to_markdown('<p style="text-decoration: line-through">Art. 9º Artigo inteiro tachado.</p>')
     piece = ProvisionExtractor(DocumentParser().parse(css)).extract("9")
     assert "Artigo inteiro tachado" in piece.text

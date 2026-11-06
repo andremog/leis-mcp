@@ -49,6 +49,26 @@ async def _call(home, name, arguments):
     return result
 
 
+def test_mcp_degraded_manifest_still_serves_upstream_and_not_the_df_homonym(tmp_path):
+    home = _home(tmp_path)
+    # First boot publishes the bundle; then the persisted manifest loses blob.
+    asyncio.run(_call(home.home, "buscar_norma", {"referencia": "resolucao 1/2002-cn"}))
+    import json
+    from pathlib import Path
+
+    versions = Path(home.home) / "overlay" / "versions"
+    manifest_path = next(versions.glob("p-*/manifest.json"))
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del payload["norms"][0]["blob"]
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+    found = asyncio.run(_call(home.home, "buscar_norma", {"referencia": "Resolução nº 1/2002 do Congresso Nacional"}))
+    assert not found.is_error
+    assert found.structured_content["total"] == 0
+    senate = asyncio.run(_call(home.home, "ler_artigo", {"norma": "codigo de etica do senado", "artigo": "1"}))
+    # The overlay is unusable, so the historical alias is absent rather than a wrong norm.
+    assert senate.is_error or senate.structured_content.get("total", 1) == 0
+
+
 def test_mcp_tools_return_cn_identity_and_reject_contradictory_organ(tmp_path):
     home = _home(tmp_path).home
     found = asyncio.run(_call(home, "buscar_norma", {"referencia": "Resolução nº 1/2002 do Congresso Nacional"}))
@@ -66,6 +86,12 @@ def test_mcp_tools_return_cn_identity_and_reject_contradictory_organ(tmp_path):
     regimento = asyncio.run(_call(home, "ler_artigo", {"norma": "regimento comum", "artigo": "1"}))
     assert any("Corte de consolidação" in notice for notice in regimento.structured_content["avisos"])
     assert any("janeiro de 2023" in notice for notice in regimento.structured_content["avisos"])
+    assert any("Vigência não verificada" in notice for notice in regimento.structured_content["avisos"])
+
+    senate = asyncio.run(_call(home, "ler_artigo", {"norma": "codigo de etica do senado", "artigo": "1"}))
+    assert senate.structured_content["norma"]["natureza_texto"] == "historico"
+    assert any("NÃO é a versão compilada" in notice for notice in senate.structured_content["avisos"])
+    assert any("Vigência não verificada" in notice for notice in senate.structured_content["avisos"])
 
     ricd = asyncio.run(_call(home, "ler_artigo", {"norma": "ricd", "artigo": "1"}))
     assert any("Resolução nº 33" in notice or "33, de 2026" in notice for notice in ricd.structured_content["avisos"])
@@ -82,6 +108,9 @@ def test_mcp_tools_return_cn_identity_and_reject_contradictory_organ(tmp_path):
     )
     assert listed.structured_content["total"] == 1
     assert listed.structured_content["normas"][0]["caminho"].endswith("resolucao-1-2002.md")
+
+    cached = asyncio.run(_call(home, "buscar_texto", {"consulta": "quadragésimo segundo", "limite": 5}))
+    assert cached.structured_content["total_ocorrencias"] >= 1
 
     text = asyncio.run(
         _call(home, "buscar_texto", {"consulta": "quadragésimo segundo", "norma": "resolucao 1/2002-cn"})

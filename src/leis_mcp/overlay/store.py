@@ -6,6 +6,7 @@ The upstream index is a different file (`index.sqlite`). Rebuilding it leaves th
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import sqlite3
@@ -19,7 +20,14 @@ from ..config import Settings
 from ..content.front_matter import FrontMatterParser
 from ..legal_text.document_parser import DocumentParser
 from ..models import Reference
-from .identity import norm_identity, require_norm_path, require_version, version_id
+from .identity import (
+    norm_identity,
+    provenance_basename,
+    require_canonical,
+    require_norm_path,
+    require_version,
+    version_id,
+)
 from .render import git_blob, render_document, repository_path
 from .store_errors import OverlayError
 
@@ -86,7 +94,7 @@ class ActiveOverlay:
 class OverlayStore:
     def __init__(self, settings: Settings):
         self.root = settings.overlay_dir
-        self._protected = _protected_paths(settings)
+        self._protected = collection_protected(settings)
 
     @property
     def versions(self) -> Path:
@@ -117,7 +125,7 @@ class OverlayStore:
             require_version(previous)
             require_version(current["version"])
             # Validate before any pointer byte changes.
-            verified = self._verify_published(self._version_dir(previous))
+            verified = self._verify_published(self._version_dir(previous), origin="rollback", expected_version=previous)
             before = self.pointer.read_bytes()
             try:
                 self._write_pointer({"version": previous, "origin": "rollback", "previous": current["version"]})
@@ -135,7 +143,11 @@ class OverlayStore:
         if not pointer:
             return {"ativo": False}
         try:
-            active = self._verify_published(self._version_dir(pointer["version"]))
+            active = self._verify_published(
+                self._version_dir(pointer["version"]),
+                origin=str(pointer.get("origin")),
+                expected_version=pointer["version"],
+            )
         except (OverlayError, json.JSONDecodeError, UnicodeError, OSError) as exc:
             return {"ativo": False, "erro": str(exc), "ponteiro": pointer.get("version")}
         return {
@@ -155,7 +167,9 @@ class OverlayStore:
             return self._activate_tree(package_bundle(), origin="bundle") if bundled else None
         if bundled and active.get("origin") == "bundle" and active.get("version") != bundled["version"]:
             return self._activate_tree(package_bundle(), origin="bundle")
-        return self._verify_published(self._version_dir(active["version"]))
+        return self._verify_published(
+            self._version_dir(active["version"]), origin=str(active.get("origin")), expected_version=active["version"]
+        )
 
     def _activate_tree(self, source: Path, *, origin: str) -> ActiveOverlay:
         manifest = _load_manifest(source / "manifest.json")
@@ -166,14 +180,14 @@ class OverlayStore:
         current = self._read_pointer()
         target = self._publish(source, manifest, current)
         if current and current.get("version") == version and current.get("origin") == origin:
-            return self._verify_published(target)
+            return self._verify_published(target, origin=origin, expected_version=version)
         previous = None if not current or current.get("version") == version else current.get("version")
         if current and current.get("version") == version:
             previous = current.get("previous")
         before = self.pointer.read_bytes() if self.pointer.exists() else None
         try:
             self._write_pointer({"version": version, "origin": origin, "previous": previous})
-            return self._verify_published(target)
+            return self._verify_published(target, origin=origin, expected_version=version)
         except Exception:
             if before is None:
                 self.pointer.unlink(missing_ok=True)
@@ -182,13 +196,15 @@ class OverlayStore:
             raise
 
     def _publish(self, source: Path, manifest: dict[str, Any], pointer: dict[str, Any] | None) -> Path:
+        _refuse_symlink_chain(self.root)
+        self._purge_staging()
         version = manifest["version"]
         target = self._version_dir(version)
         if target.exists() or target.is_symlink():
             try:
                 if target.is_symlink():
                     raise OverlayError("Versão publicada não pode ser um link.")
-                self._verify_published(target)
+                self._verify_published(target, origin="verified", expected_version=version)
                 return target
             except OverlayError:
                 referenced = pointer and version in (pointer.get("version"), pointer.get("previous"))
@@ -214,19 +230,25 @@ class OverlayStore:
         except Exception:
             shutil.rmtree(staging, ignore_errors=True)
             raise
-        self._verify_published(target)
+        self._verify_published(target, origin="verified", expected_version=version)
         return target
 
     def _build_staging(self, source: Path, manifest: dict[str, Any]) -> Path:
         staging_root = self.root / "staging"
+        if staging_root.is_symlink():
+            raise OverlayError("Diretório de staging não pode ser um link.")
         staging_root.mkdir(parents=True, exist_ok=True)
         _require_space(staging_root)
         staging = staging_root / f".{manifest['version']}.{os.getpid()}.{secrets.token_hex(4)}"
-        if staging.exists():
-            shutil.rmtree(staging)
-        _copy_regular_tree(source, staging)
-        self._build_index(staging, manifest)
-        (staging / "READY").write_text("ok\n", encoding="utf-8")
+        try:
+            if staging.exists():
+                shutil.rmtree(staging)
+            _copy_regular_tree(source, staging)
+            self._build_index(staging, manifest)
+            (staging / "READY").write_text("ok\n", encoding="utf-8")
+        except Exception:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
         return staging
 
     def _swap_in(self, staging: Path, target: Path) -> None:
@@ -245,7 +267,15 @@ class OverlayStore:
         else:
             if moved:
                 shutil.rmtree(retired, ignore_errors=True)
-        self._verify_published(target)
+        self._verify_published(target, origin="verified", expected_version=target.name)
+
+    def _purge_staging(self) -> None:
+        """Drops unpublished staging leftovers. Active and previous versions live under versions/."""
+        staging = self.root / "staging"
+        if staging.is_symlink():
+            raise OverlayError("Diretório de staging não pode ser um link.")
+        if staging.exists():
+            shutil.rmtree(staging)
 
     def _retire(self, target: Path) -> None:
         if target.is_symlink():
@@ -290,15 +320,24 @@ class OverlayStore:
             )
             db.commit()
 
-    def _verify_published(self, directory: Path) -> ActiveOverlay:
-        if directory.is_symlink() or not directory.is_dir():
-            raise OverlayError("Versão do overlay ausente ou inválida.")
-        if not (directory / "READY").is_file() or (directory / "READY").is_symlink():
-            raise OverlayError("Versão do overlay incompleta.")
-        manifest = _load_manifest(directory / "manifest.json")
-        self._verify_tree(directory, manifest)
-        rows = _index_rows(directory / "index.sqlite", manifest)
-        return ActiveOverlay(directory, manifest["version"], "verified", manifest, rows)
+    def _verify_published(self, directory: Path, *, origin: str, expected_version: str) -> ActiveOverlay:
+        try:
+            if directory.is_symlink() or not directory.is_dir():
+                raise OverlayError("Versão do overlay ausente ou inválida.")
+            if directory.name != expected_version:
+                raise OverlayError("Diretório da versão não confere com o ponteiro.")
+            if not (directory / "READY").is_file() or (directory / "READY").is_symlink():
+                raise OverlayError("Versão do overlay incompleta.")
+            manifest = _load_manifest(directory / "manifest.json")
+            if manifest["version"] != expected_version:
+                raise OverlayError("Manifesto não confere com a versão esperada.")
+            self._verify_tree(directory, manifest)
+            rows = _index_rows(directory / "index.sqlite", manifest)
+        except OverlayError:
+            raise
+        except (KeyError, ValueError, TypeError, json.JSONDecodeError, UnicodeError, sqlite3.Error) as exc:
+            raise OverlayError("Versão do overlay ilegível.") from exc
+        return ActiveOverlay(directory, manifest["version"], origin, manifest, rows)
 
     def _verify_tree(self, directory: Path, manifest: dict[str, Any]) -> None:
         if manifest.get("version") != version_id(manifest["norms"]):
@@ -325,22 +364,28 @@ class OverlayStore:
             if body_sha256(body) != item["body_sha256"]:
                 raise OverlayError(f"Hash do corpo divergente em {path}.")
             _metadata_matches(parsed.metadata, item)
-            provenance = directory / "provenance" / f"{item['canonical_id'].replace(':', '_')}.json"
-            stored = json.loads(_read_bounded(provenance).decode())
-            if stored != item["provenance"]:
+            provenance = _provenance_file(directory, item["canonical_id"])
+            try:
+                stored = json.loads(_read_bounded(provenance).decode())
+            except json.JSONDecodeError as exc:
+                raise OverlayError(f"Proveniência ilegível em {path}.") from exc
+            if not isinstance(stored, dict) or stored != item["provenance"]:
                 raise OverlayError(f"Proveniência divergente em {path}.")
         if len(paths) != len(manifest["norms"]):
             raise OverlayError("Manifesto parlamentar inválido.")
 
     def _version_dir(self, version: str) -> Path:
         require_version(version)
+        _refuse_symlink_chain(self.root)
+        if self.versions.is_symlink():
+            raise OverlayError("Diretório de versões não pode ser um link.")
         directory = self.versions / version
-        root = self.versions.resolve()
         if directory.is_symlink():
             raise OverlayError("Versão do overlay não pode ser um link.")
-        resolved = directory.resolve() if directory.exists() else (self.versions / version)
+        root = self.versions.resolve()
+        resolved = directory.resolve() if directory.exists() else directory.resolve()
         try:
-            resolved.resolve().relative_to(root)
+            resolved.relative_to(root)
         except ValueError as exc:
             raise OverlayError("Versão fora do diretório do overlay.") from exc
         return directory
@@ -540,7 +585,7 @@ def _write_bundle_files(directory: Path, norms: list[dict[str, Any]], manifest: 
         target = _norm_path(directory, item["path"])
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(source["_markdown"], encoding="utf-8")
-        provenance = directory / "provenance" / f"{item['canonical_id'].replace(':', '_')}.json"
+        provenance = _provenance_path(directory, item["canonical_id"])
         provenance.parent.mkdir(parents=True, exist_ok=True)
         provenance.write_text(json.dumps(item["provenance"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (directory / "manifest.json").write_text(
@@ -564,11 +609,28 @@ def _load_manifest(path: Path) -> dict[str, Any]:
         for item in payload["norms"]:
             if not isinstance(item, dict):
                 raise OverlayError("Manifesto parlamentar inválido.")
-            norm_identity(item)
-            require_norm_path(item["path"])
+            _require_manifest_norm(item)
     except (KeyError, TypeError, ValueError) as exc:
         raise OverlayError("Manifesto parlamentar inválido.") from exc
     return payload
+
+
+def _require_manifest_norm(item: dict[str, Any]) -> None:
+    """Every field later read from a persisted norm, not only the identity hash."""
+    norm_identity(item)
+    require_canonical(item.get("canonical_id"))
+    require_norm_path(item.get("path"))
+    blob = item.get("blob")
+    if not isinstance(blob, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", blob):
+        raise OverlayError("Hash do manifesto recusado.")
+    provenance = item.get("provenance")
+    if not isinstance(provenance, dict) or provenance.get("canonical_id") != item["canonical_id"]:
+        raise OverlayError("Proveniência do manifesto recusada.")
+    if not isinstance(item.get("vigencia"), str) or not item["vigencia"]:
+        raise OverlayError("Vigência do manifesto recusada.")
+    year = item.get("year")
+    if isinstance(year, bool) or not isinstance(year, int):
+        raise OverlayError("Ano do manifesto recusado.")
 
 
 def _metadata_matches(metadata: dict[str, Any], item: dict[str, Any]) -> None:
@@ -599,21 +661,37 @@ def _index_rows(database: Path, manifest: dict[str, Any]) -> int:
             rows = db.execute(
                 "SELECT path, hex(blob), sphere, kind, year, number, date, agency FROM norms ORDER BY path"
             ).fetchall()
+            index_sql = [
+                row[0] or ""
+                for row in db.execute("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'norms'")
+            ]
     except sqlite3.DatabaseError as exc:
         raise OverlayError("Índice do overlay ilegível.") from exc
     if not ready or ready[0] != "1" or not commit or commit[0] != manifest["version"]:
         raise OverlayError("Índice do overlay incompleto.")
-    if not total or int(total[0]) != len(rows) or len(rows) != len(manifest["norms"]):
-        raise OverlayError("Índice do overlay não confere com o manifesto.")
+    if not any("unique" in sql.casefold() and "path" in sql.casefold() for sql in index_sql):
+        raise OverlayError("Índice do overlay sem unicidade de caminho.")
+    try:
+        declared = int(total[0]) if total and total[0] is not None else None
+    except (TypeError, ValueError) as exc:
+        raise OverlayError("Total do índice do overlay ilegível.") from exc
     expected = {item["path"]: item for item in manifest["norms"]}
+    if declared != len(manifest["norms"]) or len(rows) != len(expected):
+        raise OverlayError("Índice do overlay não confere com o manifesto.")
+    seen: set[str] = set()
     for path, blob, sphere, kind, year, number, date, agency in rows:
+        if path in seen:
+            raise OverlayError("Caminho repetido no índice do overlay.")
+        seen.add(path)
         item = expected.get(path)
-        if item is None or blob.lower() != item["blob"] or agency != item["organ"]:
+        if item is None or blob.lower() != str(item.get("blob", "")).lower() or agency != item.get("organ"):
             raise OverlayError("Linha do índice do overlay divergente.")
-        if sphere != item["sphere"] or kind != item["kind"] or str(number) != str(item["number"]):
+        if sphere != item.get("sphere") or kind != item.get("kind") or str(number) != str(item.get("number")):
             raise OverlayError("Linha do índice do overlay divergente.")
         if year != item.get("year") or (date or "") != (item.get("date") or ""):
             raise OverlayError("Linha do índice do overlay divergente.")
+    if seen != set(expected):
+        raise OverlayError("Índice do overlay não cobre o manifesto.")
     return len(rows)
 
 
@@ -636,17 +714,33 @@ def _norm_file(root: Path, relative: str) -> Path:
     return candidate
 
 
+def _provenance_path(root: Path, canonical_id: str) -> Path:
+    return _contained_path(root, f"provenance/{provenance_basename(canonical_id)}")
+
+
+def _provenance_file(root: Path, canonical_id: str) -> Path:
+    candidate = _provenance_path(root, canonical_id)
+    if candidate.is_symlink() or not candidate.is_file():
+        raise OverlayError("Proveniência ausente.")
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError as exc:
+        raise OverlayError("Proveniência fora do pacote.") from exc
+    return candidate
+
+
 def _contained_path(root: Path, relative: str) -> Path:
     if relative.startswith("/") or ".." in relative.split("/"):
         raise OverlayError("Caminho de norma escapa do pacote.")
-    root_resolved = root.resolve()
-    candidate = root.joinpath(*relative.split("/"))
+    root_resolved = Path(root).resolve()
+    candidate = root_resolved.joinpath(*relative.split("/"))
     lexical = Path(os.path.normpath(str(candidate)))
     try:
         lexical.relative_to(root_resolved)
     except ValueError as exc:
         raise OverlayError("Caminho de norma escapa do pacote.") from exc
-    return candidate
+    return Path(root).joinpath(*relative.split("/"))
 
 
 def _contained_file(root: Path, relative: str) -> Path:
@@ -725,17 +819,8 @@ def _recognised_bundle(directory: Path) -> bool:
     return isinstance(payload, dict) and payload.get("kind") == _BUNDLE_KIND
 
 
-def _refuse_protected(destination: Path, extra: tuple[Path, ...]) -> None:
-    if destination.exists() and destination.is_symlink():
-        raise OverlayError("Destino da coleta não pode ser um link.")
-    resolved = destination.resolve()
-    protected = set(_PROTECTED_ROOTS)
-    protected.update(path.resolve() for path in extra if path.exists())
-    if resolved in protected:
-        raise OverlayError("Destino da coleta recusado.")
-
-
-def _protected_paths(settings: Settings) -> tuple[Path, ...]:
+def collection_protected(settings: Settings) -> tuple[Path, ...]:
+    """Paths the CLI refuses to replace, including descendants and ancestors."""
     return (
         settings.home,
         settings.repo_dir,
@@ -743,7 +828,44 @@ def _protected_paths(settings: Settings) -> tuple[Path, ...]:
         settings.cache_dir,
         settings.overlay_dir,
         settings.overlay_dir / "versions",
+        settings.overlay_dir / "staging",
     )
+
+
+def _refuse_protected(destination: Path, extra: tuple[Path, ...]) -> None:
+    _refuse_symlink_chain(destination if destination.exists() else destination.parent)
+    if destination.exists() and destination.is_symlink():
+        raise OverlayError("Destino da coleta não pode ser um link.")
+    resolved = destination.resolve()
+    if resolved in _PROTECTED_ROOTS:
+        raise OverlayError("Destino da coleta recusado.")
+    for root in extra:
+        if not root.exists() and not root.is_absolute():
+            continue
+        root_resolved = root.resolve()
+        # Inside a protected tree, or a parent whose replacement would delete it.
+        if _is_within(resolved, root_resolved) or _is_within(root_resolved, resolved):
+            raise OverlayError("Destino da coleta recusado.")
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _refuse_symlink_chain(path: Path) -> None:
+    """Rejects a symlink at path or any existing ancestor before a write follows it."""
+    current = path
+    for _ in range(64):
+        if current.is_symlink():
+            raise OverlayError("Link simbólico recusado no caminho do overlay.")
+        parent = current.parent
+        if parent == current:
+            return
+        current = parent
 
 
 def _fsync_tree(root: Path) -> None:

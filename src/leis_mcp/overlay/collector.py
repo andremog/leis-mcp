@@ -98,7 +98,7 @@ class Collector:
         current = url
         for _hop in range(self._max_redirects + 1):
             _check_deadline(deadline)
-            hostname, ip = vetted_address(current, resolve=self._resolver())
+            hostname, ip = vetted_address(current, resolve=self._resolver(deadline))
             if self._exchange is not None:
                 status, headers, body = self._exchange(ip, current, deadline)
             else:
@@ -130,11 +130,14 @@ class Collector:
             )
         raise FetchRejected("Redirecionamentos demais.")
 
-    def _resolver(self) -> Callable:
+    def _resolver(self, deadline: float) -> Callable:
         raw = self._resolve or socket.getaddrinfo
 
         def bounded(host: str, port: int, type):  # noqa: A002
-            return _bounded(lambda: raw(host, port, type=type), self._dns_timeout, host)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise FetchRejected("Prazo da coleta esgotado.")
+            return _bounded(lambda: raw(host, port, type=type), min(self._dns_timeout, remaining), host)
 
         return bounded
 
@@ -143,7 +146,10 @@ class Collector:
         inner = self._network or httpcore.SyncBackend()
         backend = _PinnedBackend(hostname, ip, inner)
         pool = httpcore.ConnectionPool(network_backend=backend, retries=0)
-        _check_deadline(deadline)
+        budget = _remaining(deadline)
+        # httpcore reads this dict again when the body iterator starts, so the
+        # body timeout can be the time still left after the headers arrive.
+        timeouts = {"connect": budget, "read": budget, "write": budget, "pool": budget}
         request = httpcore.Request(
             b"GET",
             httpcore.URL(
@@ -158,27 +164,39 @@ class Collector:
                 (b"accept", b"text/html"),
                 (b"accept-encoding", b"identity"),
             ],
+            extensions={"timeout": timeouts},
         )
+        response = None
         try:
-            response = pool.handle_request(request)
-        except httpcore.ConnectError as exc:
-            raise FetchRejected(f"Falha de rede ao buscar a fonte oficial ({type(exc).__name__}).") from exc
-        except FetchRejected:
-            raise
+            try:
+                response = pool.handle_request(request)
+            except (
+                httpcore.NetworkError,
+                httpcore.TimeoutException,
+                httpcore.ProtocolError,
+                httpcore.ConnectionNotAvailable,
+            ) as exc:
+                raise FetchRejected(f"Falha de rede ao buscar a fonte oficial ({type(exc).__name__}).") from exc
+            remaining = _remaining(deadline)
+            timeouts["read"] = remaining
+            timeouts["write"] = remaining
+            status = response.status
+            headers = {key.decode().lower(): value.decode(errors="replace") for key, value in response.headers}
+            chunks: list[bytes] = []
+            total = 0
+            for chunk in response.iter_stream():
+                _check_deadline(deadline)
+                total += len(chunk)
+                if total > self._max_bytes:
+                    raise FetchRejected(f"Fonte maior que o limite de {self._max_bytes} bytes.")
+                chunks.append(chunk)
+            return status, headers, b"".join(chunks)
         finally:
+            if response is not None:
+                closer = getattr(response.stream, "close", None)
+                if closer is not None:
+                    closer()
             pool.close()
-        status = response.status
-        headers = {key.decode().lower(): value.decode(errors="replace") for key, value in response.headers}
-        chunks: list[bytes] = []
-        total = 0
-        for chunk in response.stream:
-            _check_deadline(deadline)
-            total += len(chunk)
-            if total > self._max_bytes:
-                response.stream.close()
-                raise FetchRejected(f"Fonte maior que o limite de {self._max_bytes} bytes.")
-            chunks.append(chunk)
-        return status, headers, b"".join(chunks)
 
 
 def _bounded(call: Callable[[], object], timeout: float, host: str) -> object:
@@ -209,9 +227,15 @@ def _join(base: str, location: str) -> str:
     return urlunsplit((base_parts.scheme, base_parts.netloc, path, "", ""))
 
 
-def _check_deadline(deadline: float) -> None:
-    if time.monotonic() > deadline:
+def _remaining(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
         raise FetchRejected("Prazo da coleta esgotado.")
+    return remaining
+
+
+def _check_deadline(deadline: float) -> None:
+    _remaining(deadline)
 
 
 # Re-export for tests that still import validate_url from the collector's dependency.

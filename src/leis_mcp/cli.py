@@ -152,18 +152,13 @@ class Cli:
         from pathlib import Path
 
         from .overlay.assemble import collect_inventory
+        from .overlay.store import collection_protected
 
         manifest = collect_inventory(
             html_dir=Path(args.html_dir) if args.html_dir else None,
             destination=Path(args.into),
             replace=args.replace,
-            protected=(
-                self._settings.home,
-                self._settings.repo_dir,
-                self._settings.db_path,
-                self._settings.cache_dir,
-                self._settings.overlay_dir,
-            ),
+            protected=collection_protected(self._settings),
         )
         if args.activate:
             from .overlay.store import OverlayStore

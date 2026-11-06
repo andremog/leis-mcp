@@ -21,9 +21,41 @@ _HEADING = re.compile(
     r"^(?:T[ÍI]TULO|CAP[ÍI]TULO|SE[ÇC][ÃA]O|SUBSE[ÇC][ÃA]O|LIVRO|PARTE|ANEXO)\b",
     re.IGNORECASE,
 )
-# A second article is a new provision only after a sentence boundary. "no Art. 7º" stays a citation.
+# A second article is a new provision only after a sentence boundary. "no Art. 7º" and "cf. Art. 7º" stay citations.
 _PACKED_ARTICLE = re.compile(r"(?<=[.!?])\s+(?=Art\.\s*\d)")
 _AFTER_SENTENCE = re.compile(r"(?<=[.!?])\s+(?=Par[áa]grafo\s+[úu]nico\b|§\s*\d)")
+_ABBREVIATIONS = frozenset(
+    {
+        "cf",
+        "art",
+        "arts",
+        "n",
+        "nr",
+        "obs",
+        "op",
+        "cit",
+        "ib",
+        "id",
+        "loc",
+        "vol",
+        "ed",
+        "dr",
+        "sr",
+        "sra",
+        "etc",
+        "ex",
+        "v",
+        "p",
+        "pp",
+        "inc",
+        "al",
+        "ss",
+        "fl",
+        "fls",
+        "pag",
+    }
+)
+_WORD_BEFORE = re.compile(r"([A-Za-zÀ-ÿ]+)$")
 _CHROME = ("navegador defasado", "veja também:")
 _STOP = "Este texto não substitui a publicação oficial."
 _START = "\ue000"
@@ -105,6 +137,9 @@ class _HtmlToLines(HTMLParser):
             text = f"~~{core}~~" if core else ""
         if text and text.strip("~").strip():
             self.lines.append(text)
+        if self._strike:
+            # The deletion is still open, so the next segment must start inside it.
+            self._buf.append(_START)
 
 
 def html_to_markdown(html: str) -> str:
@@ -138,13 +173,28 @@ def _clean(text: str) -> str:
 
 
 def _split_packed_provisions(lines: list[str]) -> list[str]:
-    """Splits real packed provisions. An inline citation such as 'no Art. 7º' stays on the same line."""
+    """Splits real packed provisions. Citations after 'no' or an abbreviation such as 'cf.' stay put."""
     split: list[str] = []
     for line in lines:
-        pieces = [part.strip() for part in _PACKED_ARTICLE.split(line) if part.strip()] or [line]
-        for piece in pieces:
-            split.extend(part.strip() for part in _AFTER_SENTENCE.split(piece) if part.strip())
+        for piece in _split_keeping_abbreviations(line, _PACKED_ARTICLE):
+            split.extend(_split_keeping_abbreviations(piece, _AFTER_SENTENCE))
     return split
+
+
+def _split_keeping_abbreviations(line: str, pattern: re.Pattern[str]) -> list[str]:
+    parts: list[str] = []
+    start = 0
+    for match in pattern.finditer(line):
+        punct = match.start() - 1
+        word = _WORD_BEFORE.search(line[:punct]) if punct >= 0 and line[punct] == "." else None
+        if word and word.group(1).casefold() in _ABBREVIATIONS:
+            continue
+        parts.append(line[start : match.start()].strip())
+        start = match.end()
+    tail = line[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts or [line]
 
 
 def _is_chrome(line: str) -> bool:

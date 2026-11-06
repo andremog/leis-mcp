@@ -32,7 +32,7 @@ A identidade canônica é `br:<esfera>:<órgão>:<tipo>:<número>:<ano>`, por ex
 
 | Peça | Papel |
 |---|---|
-| `overlay/allowlist.py` + `collector.py` | Busca HTTPS só em hosts oficiais. Recusa IP literal, usuário na URL, endereço não público, redirecionamento fora da lista, conteúdo comprimido, corpo acima de 8 MB e mais de 3 redirecionamentos. O TCP vai para o IP já checado, com SNI no nome oficial. Prazo total de 45 s e prazo de DNS de 5 s. Proxies de ambiente não são usados. |
+| `overlay/allowlist.py` + `collector.py` | Busca HTTPS só em hosts oficiais, com `httpcore` 1.0.9 declarado. Recusa IP literal, usuário na URL, endereço não público, redirecionamento fora da lista, conteúdo comprimido e corpo acima de 8 MB. O TCP vai para o IP já checado, com SNI no nome oficial. Conexão, TLS, leitura e escrita recebem o prazo que ainda resta (teto de 45 s; DNS no máximo 5 s). O pool só fecha depois de ler o corpo. Proxies de ambiente não são usados. |
 | `overlay/normalizer.py` | HTML oficial vira Markdown. Texto tachado (`s`, `del`, `strike`, `line-through`) permanece entre `~~`. Nota de revogação e de emenda fica no texto. Artigo, parágrafo, inciso e alínea continuam no parser que já existia, inclusive `4-A` e `104-A`. |
 | `overlay/assemble.py` | Lê `data/parliamentary/inventory.json`, normaliza e grava um pacote. Não é agendado e não entra no `update`. |
 | `overlay/store.py` | Copia para um staging único, confere caminhos, hashes, metadados, proveniência e o SQLite, grava `READY` e só então publica em `versions/`. O ponteiro muda depois. `rollback` valida o destino antes de gravar o ponteiro. Um diretório existente que não confere não é ativado. |
@@ -66,7 +66,7 @@ Apelidos (`regimento comum`, `ricd`, `codigo de etica da camara`, …) apontam p
 
 ## Limite conhecido do coletor
 
-A checagem de IP acontece antes do pedido. A conexão TCP usa esse IP; o certificado e o SNI continuam no nome oficial. Cada redirecionamento repete a checagem. Isso fecha o rebinding entre o `getaddrinfo` e um segundo lookup da biblioteca HTTP. Não fecha um desvio feito no caminho, depois do socket aberto, nem um proxy transparente da rede. A coleta não é ferramenta MCP.
+A checagem de IP acontece antes do pedido. A conexão TCP usa esse IP; o certificado e o SNI continuam no nome oficial. Cada redirecionamento repete a checagem e recalcula o prazo restante. Isso fecha o rebinding entre o `getaddrinfo` e um segundo lookup. Não fecha um desvio feito no caminho, depois do socket aberto, nem um proxy transparente da rede. A coleta não é ferramenta MCP. Um ancestral que seja link simbólico é recusado antes de criar diretório. O identificador canônico não entra em nome de arquivo se tiver barra ou `..`. `collect --replace` não substitui nada dentro do home, do clone, do cache nem do overlay.
 
 O HTML baixado é dado. Não é executado. O texto devolvido ao cliente continua sendo dado de fonte: o servidor pede ao assistente que não trate frase do dispositivo como instrução, mas não impede um cliente de fazer isso. O YAML do cabeçalho é gerado com `yaml.safe_dump` e relido com o SafeLoader que o projeto já usa.
 
