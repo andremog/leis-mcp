@@ -1,6 +1,6 @@
 # Operação do overlay parlamentar
 
-Esta onda implementa e testa no repositório. Não altera o app no Fly, não lê segredo e não agenda coleta. Publicar a branch depende de QA independente e de revisão de segurança separadas: quem escreveu o código não é o aprovador.
+O código revisado pelas duas portas independentes é `486b4e097e0c358915d3b7c4b09c5a70c01a8c70`. Esta nota só corrige o texto: não muda coletor, pacote nem `fly.toml`. O `fly.toml` continua com o mesmo app, o mesmo volume e o mesmo segredo. A coleta não é agendada. Quem escreveu o código não aprova o merge em `main`.
 
 Base desta onda: `6e2f930bc4bf1902598cfdb05db2878be0ced06e` (`main`). Branch: `cursor/parliamentary-overlay-bfbf`.
 
@@ -21,7 +21,7 @@ Na primeira execução, se `overlay/active.json` não existe, o processo valida 
 
 `leis-mcp update` continua só no clone e no `index.sqlite`. O processo que já está no ar mantém os arquivos SQLite que abriu. Depois de um update, ou de um rollback, reinicie o app para reler o disco. É o mesmo cuidado que o índice upstream já exigia.
 
-Não cron, não `warm` específico e não coleta na subida. A coleta usa rede e é comando de manutenção.
+Não cron, não `warm` específico e não coleta na subida. A coleta é o comando manual `overlay collect`: não é ferramenta MCP e não entra em agendamento.
 
 ## Comandos
 
@@ -67,12 +67,16 @@ uv run leis-mcp overlay collect --html-dir /tmp/leis-src --into "$PWD/src/leis_m
 
 Os HTML em `/tmp/leis-src` tinham sido baixados das URLs do inventário, com `User-Agent: leis-mcp-overlay/0.1`. O `fetched_at` de cada proveniência é o horário `Date` dessa resposta, em UTC.
 
-## Plano para a publicação, depois da revisão
+## Nota de publicação
 
-1. QA independente e revisão de segurança lêem o diff, os testes e este diretório. O autor não aprova a própria onda.
-2. Só então: push da branch, PR para `main`, CI, `fly deploy` do app que já existe.
-3. Não criar segredo novo. Conferir que `LEIS_MCP_API_KEY` continua definido antes do deploy, como o README já manda.
-4. Depois do deploy, com a chave que o operador já tem (não nesta execução): `/health` sem chave continua 200; `/mcp` sem chave continua 401; uma chamada autenticada a `buscar_norma` / `ler_artigo` da Resolução nº 1/2002-CN devolve o art. 7º acima e não uma norma do DF.
-5. Não agendar `overlay collect` no Fly. Atualizar o pacote é outra onda, com HTML novo, versão nova e o mesmo rollback.
+QA e segurança independentes passaram o código `486b4e097e0c358915d3b7c4b09c5a70c01a8c70` para o pacote congelado de seis normas. Nesta máquina o builder registrou `ruff` limpo, 170 testes fora de `integration` e 21 de integração. Esses números são do autor, não uma reexecução dos revisores. O merge em `main` continua dependendo de aprovação explícita do dono. O deploy pode usar a imagem desta branch sem esse merge.
 
-Se o ponteiro estiver ilegível, a versão apontada não existir, o manifesto ou o índice estiverem incompletos, o hash não conferir, faltar `blob` ou proveniência, o total do índice não for numérico, ou o diretório não for o identificador do manifesto, o processo registra o erro e sobe só com o upstream. Isso cobre `OverlayError`, JSON inválido e SQLite ilegível. Um erro do próprio índice upstream não é escondido. Pedido que nomeia o Congresso Nacional, nesse modo, não devolve o homônimo do DF. `/health` continua aberto e `/mcp` continua exigindo o Bearer. O prazo da coleta limita conexão, TLS, leitura e escrita; um desvio no caminho, depois do socket, continua fora desse controle. Hashes conferem integridade do pacote local, não autenticam a origem.
+Limites que não bloqueiam esta imagem e ficam para acompanhamento:
+
+- R1. Cada conexão, TLS, leitura e escrita tem teto finito, no máximo 45 s por operação, e o DNS no máximo 5 s. A soma pode passar de 45 s. Não há garantia de prazo total estrito.
+- R2. Erro de rede ao ler o corpo, depois dos cabeçalhos, pode não ser traduzido para a recusa de coleta. A montagem não grava nem ativa essa norma.
+- R3. `tests/test_overlay_httpcore.py::test_bounded_official_resolution_page` acessa a página oficial e não tem a marca `integration`.
+
+A coleta permanece manual, fora do MCP e fora de qualquer agenda. Não criar segredo novo. `LEIS_MCP_API_KEY` continua o segredo que o app já tem. Depois do deploy, `/health` sem chave continua 200, `/mcp` sem chave continua 401, e as quatro ferramentas autenticadas precisam devolver a identidade do Congresso Nacional, o art. 7º, o corte de consolidação e o aviso histórico do Senado, com o upstream ainda consultável. O rollback da imagem é o release anterior do Fly, com `fly releases rollback`; o rollback do overlay é `leis-mcp overlay rollback` e um restart. Não agendar `overlay collect`.
+
+Se o ponteiro estiver ilegível, a versão apontada não existir, o manifesto ou o índice estiverem incompletos, o hash não conferir, faltar `blob` ou proveniência, o total do índice não for numérico, ou o diretório não for o identificador do manifesto, o processo registra o erro e sobe só com o upstream. Isso cobre `OverlayError`, JSON inválido e SQLite ilegível. Um erro do próprio índice upstream não é escondido. Pedido que nomeia o Congresso Nacional, nesse modo, não devolve o homônimo do DF. `/health` continua aberto e `/mcp` continua exigindo o Bearer. O coletor limita cada operação de rede, não o relógio total da coleta. Um desvio no caminho, depois do socket, continua fora desse controle. Hashes conferem integridade do pacote local, não autenticam a origem.
