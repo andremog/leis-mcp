@@ -1,5 +1,6 @@
 """Reads the parliamentary index beside the upstream one and serves its files from disk."""
 
+import json
 import logging
 import sqlite3
 from pathlib import Path
@@ -10,7 +11,7 @@ from ..config import Settings
 from ..content.store import ContentStore
 from ..errors import IndexMissingError
 from ..models import Norm, NormQuery, Reference
-from .store import ActiveOverlay, OverlayStore
+from .store import ActiveOverlay, OverlayError, OverlayStore
 
 log = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ def attach(
     active: ActiveOverlay | None
     try:
         active = OverlayStore(settings).ensure_active()
-    except (OSError, sqlite3.Error, IndexMissingError):
+    except (OSError, sqlite3.Error, IndexMissingError, OverlayError, json.JSONDecodeError, UnicodeError):
         log.exception("Parliamentary overlay unavailable; serving the upstream index only")
         active = None
     upstream = NormIndex(settings)

@@ -1,6 +1,6 @@
 # Inventário da primeira onda
 
-Coletado em 6 de novembro de 2026 a partir do HTML oficial. Pacote `p-b7441d4e7f37f9a3c6de`. Não é lista exaustiva do direito parlamentar. Vigência de todos os itens: **não verificada**.
+Coletado em 6 de novembro de 2026 a partir do HTML oficial. Pacote `p-985cdac4a67032e34cf0`. O identificador cobre corpo e metadados jurídicos, não só o corpo. Não é lista exaustiva do direito parlamentar. Vigência de todos os itens: **não verificada**. O corte de consolidação do Regimento Comum (janeiro de 2023) e a nota do RICD (HTML com a Resolução nº 33, de 2026) aparecem em `versao_texto` e no aviso de corte.
 
 O hash e a URL de cada arquivo estão em `src/leis_mcp/data/parliamentary/bundle/provenance/`. O corpo servido está em `bundle/norms/`.
 

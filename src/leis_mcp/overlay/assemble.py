@@ -6,6 +6,7 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
+from .allowlist import MAX_BYTES
 from .collector import Collector
 from .normalizer import html_to_markdown
 from .store import OverlayError, built_norm, write_bundle
@@ -21,7 +22,13 @@ def load_inventory() -> dict[str, Any]:
     return json.loads(_INVENTORY.read_text(encoding="utf-8"))
 
 
-def collect_inventory(*, html_dir: Path | None, destination: Path) -> dict[str, Any]:
+def collect_inventory(
+    *,
+    html_dir: Path | None,
+    destination: Path,
+    replace: bool = False,
+    protected: tuple[Path, ...] = (),
+) -> dict[str, Any]:
     inventory = load_inventory()
     collector = None if html_dir else Collector()
     norms: list[dict[str, Any]] = []
@@ -41,12 +48,19 @@ def collect_inventory(*, html_dir: Path | None, destination: Path) -> dict[str, 
             collector.close()
     if not norms:
         raise OverlayError("Nenhuma norma parlamentar foi normalizada.")
-    return write_bundle(destination, norms, gaps)
+    return write_bundle(destination, norms, gaps, replace=replace, protected=protected)
 
 
 def _load(item: dict[str, Any], html_dir: Path | None, collector: Collector | None) -> tuple[bytes, str, str]:
     if html_dir is not None:
-        path = html_dir / f"{item['local_name']}.html"
+        name = str(item["local_name"])
+        if "/" in name or name.startswith(".") or not name.replace("-", "").isalnum():
+            raise OverlayError("Nome local da fonte recusado.")
+        path = html_dir / f"{name}.html"
+        if path.is_symlink() or not path.is_file():
+            raise OverlayError("Arquivo local da fonte recusado.")
+        if path.stat().st_size > MAX_BYTES:
+            raise OverlayError("Arquivo local da fonte acima do limite.")
         raw = path.read_bytes()
         header = path.with_suffix(".headers")
         fetched_at = _header_date(header) if header.exists() else datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")

@@ -1,5 +1,5 @@
 {
-  "version": "p-b7441d4e7f37f9a3c6de",
+  "version": "p-985cdac4a67032e34cf0",
   "not_exhaustive": true,
   "norms": [
     {
@@ -32,7 +32,11 @@
         "vigencia": "nao_verificada",
         "historical_url": "https://www2.camara.leg.br/legin/fed/rescon/2002/resolucao-1-8-maio-2002-497942-publicacaooriginal-1-pl.html",
         "notes": "Pilot. Página norma atualizada. A publicação original fica só como URL histórica para não haver duas identidades 1/2002-CN no índice."
-      }
+      },
+      "title": "Resolução nº 1, de 2002-CN",
+      "summary": "Dispõe sobre a apreciação, pelo Congresso Nacional, das Medidas Provisórias a que se refere o art. 62 da Constituição Federal, e dá outras providências.",
+      "publication": "Promulgação datada de 8 de maio de 2002 no texto. A publicação original não foi indexada como segunda versão.",
+      "text_version": "compilada pela fonte oficial (página norma atualizada da Câmara dos Deputados); vigência não verificada de forma independente"
     },
     {
       "canonical_id": "br:federal:congresso-nacional:resolucao:1:1970",
@@ -65,7 +69,11 @@
         "vigencia": "nao_verificada",
         "historical_url": null,
         "notes": "Cobre sessão conjunta, comissões mistas e o prazo de veto no art. 104-A. Não incorpora o PDF do Senado atualizado até julho de 2025."
-      }
+      },
+      "title": "Resolução nº 1, de 1970-CN",
+      "summary": "Aprova o Regimento Comum do Congresso Nacional.",
+      "publication": "Ato de 11 de agosto de 1970. Republicação no Diário do Congresso Nacional, suplemento de 09/02/2023, conforme o rodapé da página.",
+      "text_version": "compilada pela fonte oficial (republicação atualizada; o HTML declara texto consolidado até janeiro de 2023); vigência não verificada de forma independente"
     },
     {
       "canonical_id": "br:federal:congresso-nacional:resolucao:1:2006",
@@ -96,7 +104,11 @@
         "vigencia": "nao_verificada",
         "historical_url": null,
         "notes": "CMO e tramitação orçamentária. O HTML traz notas de alteração, inclusive de 2025. O catálogo diz 'Não consta revogação expressa'; isso não foi tratado como verificação de vigência."
-      }
+      },
+      "title": "Resolução nº 1, de 2006-CN",
+      "summary": "Dispõe sobre a Comissão Mista Permanente a que se refere o § 1º do art. 166 da Constituição, bem como a tramitação das matérias a que se refere o mesmo artigo.",
+      "publication": "Identificador da Câmara: 22/12/2006. O catálogo da norma aponta DOU de 26/12/2006 e retificação em 28/12/2006; essas datas não foram conferidas no Diário.",
+      "text_version": "compilada pela fonte oficial (página norma atualizada da Câmara dos Deputados); vigência não verificada de forma independente"
     },
     {
       "canonical_id": "br:federal:camara-dos-deputados:resolucao:17:1989",
@@ -130,7 +142,11 @@
         "vigencia": "nao_verificada",
         "historical_url": null,
         "notes": "Texto da resolução que aprova o regimento e o regimento anexo. A numeração reinicia; ler_artigo sem bloco devolve o maior bloco e avisa a duplicidade."
-      }
+      },
+      "title": "Resolução nº 17, de 1989",
+      "summary": "Aprova o Regimento Interno da Câmara dos Deputados.",
+      "publication": "Ato de 21 de setembro de 1989. Não foi conferida contra o PDF do portal descrito como atualizado até a Resolução nº 34, de 2026.",
+      "text_version": "compilada pela fonte oficial (página norma atualizada da Câmara dos Deputados; o HTML contém notas de alteração, inclusive da Resolução nº 33, de 2026); vigência não verificada de forma independente"
     },
     {
       "canonical_id": "br:federal:camara-dos-deputados:resolucao:25:2001",
@@ -162,7 +178,11 @@
         "vigencia": "nao_verificada",
         "historical_url": null,
         "notes": "A resolução e o código anexo reiniciam a numeração dos artigos."
-      }
+      },
+      "title": "Resolução nº 25, de 2001",
+      "summary": "Institui o Código de Ética e Decoro Parlamentar da Câmara dos Deputados.",
+      "publication": "Ato de 10 de outubro de 2001. Notas de redação posterior (inclusive a Resolução nº 2, de 2011) permanecem no texto.",
+      "text_version": "compilada pela fonte oficial (página norma atualizada da Câmara dos Deputados); vigência não verificada de forma independente"
     },
     {
       "canonical_id": "br:federal:senado-federal:resolucao:20:1993",
@@ -195,7 +215,11 @@
         "vigencia": "nao_verificada",
         "historical_url": "https://legis.senado.leg.br/norma/561878",
         "notes": "Não é o texto consolidado. Ficha no Senado: https://legis.senado.leg.br/norma/561878"
-      }
+      },
+      "title": "Resolução nº 20, de 1993",
+      "summary": "Institui o Código de Ética e Decoro Parlamentar.",
+      "publication": "Publicação original. Rodapé da página: Diário do Congresso Nacional, Seção 2, de 18/03/1993. A compilação multivigente do Senado (Sigen) não foi coletada.",
+      "text_version": "publicação original (texto histórico, não consolidado)"
     }
   ],
   "gaps": [
@@ -256,5 +280,6 @@
       "coletado": false,
       "motivo": "Não há inventário de vetos. O Regimento Comum indexado traz o rito, inclusive o art. 104-A."
     }
-  ]
+  ],
+  "kind": "leis-mcp-parliamentary-bundle"
 }

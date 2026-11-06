@@ -14,13 +14,14 @@ O overlay mora em `LEIS_MCP_HOME/overlay`, fora do clone e fora do `index.sqlite
 
 ```text
 overlay/
-  active.json                 # ponteiro; a troca é um os.replace
-  versions/<id>/
+  active.json                 # ponteiro; a troca é um os.replace com fsync
+  versions/p-<20 hex>/
+    READY                     # só existe depois da validação
     manifest.json
-    index.sqlite              # mesmo formato de colunas do índice upstream
+    index.sqlite              # gerado aqui; um sqlite importado não é confiável
     norms/parlamentar/...md
     provenance/*.json
-  staging/<id>/               # cópia incompleta; só vira versão no rename
+  staging/.<id>.<pid>.<token>/   # validação; não é servida
 ```
 
 A identidade canônica é `br:<esfera>:<órgão>:<tipo>:<número>:<ano>`, por exemplo `br:federal:congresso-nacional:resolucao:1:2002`. No índice, o órgão vai na coluna `agency`, que as ferramentas já expõem como `orgao`. O caminho começa com `parlamentar/` para não colidir com um arquivo do clone.
@@ -31,13 +32,13 @@ A identidade canônica é `br:<esfera>:<órgão>:<tipo>:<número>:<ano>`, por ex
 
 | Peça | Papel |
 |---|---|
-| `overlay/allowlist.py` + `collector.py` | Busca HTTPS só em hosts oficiais. Recusa IP literal, usuário na URL, endereço não público, redirecionamento fora da lista, corpo acima de 8 MB e mais de 3 redirecionamentos. Timeout de conexão 10 s e de leitura 30 s. |
+| `overlay/allowlist.py` + `collector.py` | Busca HTTPS só em hosts oficiais. Recusa IP literal, usuário na URL, endereço não público, redirecionamento fora da lista, conteúdo comprimido, corpo acima de 8 MB e mais de 3 redirecionamentos. O TCP vai para o IP já checado, com SNI no nome oficial. Prazo total de 45 s e prazo de DNS de 5 s. Proxies de ambiente não são usados. |
 | `overlay/normalizer.py` | HTML oficial vira Markdown. Texto tachado (`s`, `del`, `strike`, `line-through`) permanece entre `~~`. Nota de revogação e de emenda fica no texto. Artigo, parágrafo, inciso e alínea continuam no parser que já existia, inclusive `4-A` e `104-A`. |
 | `overlay/assemble.py` | Lê `data/parliamentary/inventory.json`, normaliza e grava um pacote. Não é agendado e não entra no `update`. |
-| `overlay/store.py` | Copia o pacote para `staging`, renomeia para `versions/<id>` e só então troca `active.json`. A mesma versão não é copiada de novo. `rollback` aponta para a versão anterior. |
+| `overlay/store.py` | Copia para um staging único, confere caminhos, hashes, metadados, proveniência e o SQLite, grava `READY` e só então publica em `versions/`. O ponteiro muda depois. `rollback` valida o destino antes de gravar o ponteiro. Um diretório existente que não confere não é ativado. |
 | `data/parliamentary/bundle` | Pacote desta onda, já normalizado, para a imagem subir sem rede. |
 
-O identificador de versão é um hash do texto normalizado, não da data da coleta. Rodar a coleta de novo sobre o mesmo HTML não cria outra versão.
+O identificador de versão (`p-` e 20 hexadecimais) é um hash do corpo e dos metadados que a resposta mostra: natureza, `versao_texto`, fonte, apelidos, título, ementa, publicação, órgão e caminho. A data da coleta fica de fora. Recoletar só por causa do relógio não cria outra versão. Corrigir natureza, fonte ou apelido cria outra versão e passa a valer.
 
 ## Vigência e natureza do texto
 
@@ -65,6 +66,8 @@ Apelidos (`regimento comum`, `ricd`, `codigo de etica da camara`, …) apontam p
 
 ## Limite conhecido do coletor
 
-A checagem de IP acontece antes do pedido e cada redirecionamento é validado de novo. Entre a resolução DNS e a conexão a biblioteca HTTP resolve o nome outra vez. Um rebinding nesse intervalo não é fechado por esta versão. A lista de hosts e a recusa de IP literal cobrem o caso comum (metadata, loopback, rede privada, open redirect).
+A checagem de IP acontece antes do pedido. A conexão TCP usa esse IP; o certificado e o SNI continuam no nome oficial. Cada redirecionamento repete a checagem. Isso fecha o rebinding entre o `getaddrinfo` e um segundo lookup da biblioteca HTTP. Não fecha um desvio feito no caminho, depois do socket aberto, nem um proxy transparente da rede. A coleta não é ferramenta MCP.
 
-O HTML baixado é dado. Não é executado e não entra em prompt. O YAML do cabeçalho é gerado pelo normalizador com `yaml.safe_dump` e relido com o SafeLoader que o projeto já usa.
+O HTML baixado é dado. Não é executado. O texto devolvido ao cliente continua sendo dado de fonte: o servidor pede ao assistente que não trate frase do dispositivo como instrução, mas não impede um cliente de fazer isso. O YAML do cabeçalho é gerado com `yaml.safe_dump` e relido com o SafeLoader que o projeto já usa.
+
+Se o ponteiro, o manifesto ou o índice do overlay estiver ilegível ou incompleto, o processo registra o erro e sobe só com o índice upstream. Pedido que nomeia o Congresso Nacional não passa a devolver o homônimo do DF. Um índice upstream quebrado continua a falhar; esse erro não é engolido.

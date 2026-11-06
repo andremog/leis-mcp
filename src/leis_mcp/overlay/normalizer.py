@@ -21,8 +21,9 @@ _HEADING = re.compile(
     r"^(?:T[ÍI]TULO|CAP[ÍI]TULO|SE[ÇC][ÃA]O|SUBSE[ÇC][ÃA]O|LIVRO|PARTE|ANEXO)\b",
     re.IGNORECASE,
 )
-_SECOND_ARTICLE = re.compile(r"\s+(?=Art\.\s*\d)")
-_AFTER_SENTENCE = re.compile(r"(?<=\.)\s+(?=Par[áa]grafo\s+[úu]nico\b|§\s*\d)")
+# A second article is a new provision only after a sentence boundary. "no Art. 7º" stays a citation.
+_PACKED_ARTICLE = re.compile(r"(?<=[.!?])\s+(?=Art\.\s*\d)")
+_AFTER_SENTENCE = re.compile(r"(?<=[.!?])\s+(?=Par[áa]grafo\s+[úu]nico\b|§\s*\d)")
 _CHROME = ("navegador defasado", "veja também:")
 _STOP = "Este texto não substitui a publicação oficial."
 _START = "\ue000"
@@ -41,6 +42,7 @@ class _HtmlToLines(HTMLParser):
         self._open: list[bool] = []
         self._skip = 0
         self._sup = 0
+        self._strike = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
@@ -63,6 +65,7 @@ class _HtmlToLines(HTMLParser):
         struck = tag in {"s", "strike", "del"} or "line-through" in style
         self._open.append(struck)
         if struck:
+            self._strike += 1
             self._buf.append(_START)
         if tag == "sup":
             self._sup += 1
@@ -78,7 +81,9 @@ class _HtmlToLines(HTMLParser):
         if tag == "sup" and self._sup:
             self._sup -= 1
             self._buf.append("]")
-        if self._open and self._open.pop():
+        struck = self._open.pop() if self._open else False
+        if struck and self._strike:
+            self._strike -= 1
             self._buf.append(_END)
         if tag in self._BREAK:
             self._flush()
@@ -95,7 +100,10 @@ class _HtmlToLines(HTMLParser):
         raw = "".join(self._buf)
         self._buf = []
         text = _clean(raw)
-        if text:
+        if self._strike and text:
+            core = text.strip().strip("~").strip()
+            text = f"~~{core}~~" if core else ""
+        if text and text.strip("~").strip():
             self.lines.append(text)
 
 
@@ -130,12 +138,10 @@ def _clean(text: str) -> str:
 
 
 def _split_packed_provisions(lines: list[str]) -> list[str]:
-    """Splits a line that still holds two articles. A citation of another article or paragraph stays put."""
+    """Splits real packed provisions. An inline citation such as 'no Art. 7º' stays on the same line."""
     split: list[str] = []
     for line in lines:
-        pieces = [line]
-        if len(re.findall(r"Art\.\s*\d", line)) >= 2:
-            pieces = [part.strip() for part in _SECOND_ARTICLE.split(line) if part.strip()] or pieces
+        pieces = [part.strip() for part in _PACKED_ARTICLE.split(line) if part.strip()] or [line]
         for piece in pieces:
             split.extend(part.strip() for part in _AFTER_SENTENCE.split(piece) if part.strip())
     return split

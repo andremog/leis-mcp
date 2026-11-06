@@ -84,6 +84,11 @@ class Cli:
         )
         collect.add_argument("--into", required=True, help="directory that receives the bundle")
         collect.add_argument("--activate", action="store_true", help="activate the bundle after writing it")
+        collect.add_argument(
+            "--replace",
+            action="store_true",
+            help="replace an existing parliamentary bundle at --into; other directories are refused",
+        )
         collect.set_defaults(handler=self._overlay_collect)
         return parser
 
@@ -151,6 +156,14 @@ class Cli:
         manifest = collect_inventory(
             html_dir=Path(args.html_dir) if args.html_dir else None,
             destination=Path(args.into),
+            replace=args.replace,
+            protected=(
+                self._settings.home,
+                self._settings.repo_dir,
+                self._settings.db_path,
+                self._settings.cache_dir,
+                self._settings.overlay_dir,
+            ),
         )
         if args.activate:
             from .overlay.store import OverlayStore

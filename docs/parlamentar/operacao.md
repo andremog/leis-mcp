@@ -17,7 +17,7 @@ Num diretório local só para teste (`/tmp/leis-integration`, apagável), `leis-
 
 ## Subida
 
-Na primeira execução, se `overlay/active.json` não existe, o processo copia o pacote da imagem para `LEIS_MCP_HOME/overlay/versions/` e grava o ponteiro com `origin: bundle`. Se o ponteiro já é `bundle` e a imagem trouxe outra versão, a nova vira a ativa e a anterior fica para rollback. Ponteiro gravado por `collect`, `activate --from` ou `rollback` não é substituído na subida.
+Na primeira execução, se `overlay/active.json` não existe, o processo valida o pacote da imagem num staging e só então publica em `versions/` e grava o ponteiro com `origin: bundle`. Se o ponteiro já é `bundle` e a imagem trouxe outra versão, a nova vira a ativa e a anterior fica para rollback. Ponteiro `manual`, `collect` ou `rollback` não é substituído por uma imagem mais nova. Ativar de novo a mesma versão com `--from` ou `collect --activate` muda a origem para `manual` ou `collect` e preserva o campo `previous`. Ativar o pacote da imagem (`overlay activate`, sem `--from`) devolve a origem `bundle`, e a subida seguinte volta a acompanhar a imagem.
 
 `leis-mcp update` continua só no clone e no `index.sqlite`. O processo que já está no ar mantém os arquivos SQLite que abriu. Depois de um update, ou de um rollback, reinicie o app para reler o disco. É o mesmo cuidado que o índice upstream já exigia.
 
@@ -30,7 +30,8 @@ leis-mcp overlay status
 leis-mcp overlay activate                 # reinstala o pacote da imagem (origin bundle)
 leis-mcp overlay activate --from DIR      # pacote montado à mão (origin manual)
 leis-mcp overlay rollback
-leis-mcp overlay collect --into DIR       # baixa o inventário; não ativa
+leis-mcp overlay collect --into DIR       # recusa destino existente
+leis-mcp overlay collect --into DIR --replace   # só se o destino já for um pacote deste overlay
 leis-mcp overlay collect --into DIR --html-dir DIR --activate
 ```
 
@@ -38,12 +39,12 @@ leis-mcp overlay collect --into DIR --html-dir DIR --activate
 
 ## Rollback
 
-1. `leis-mcp overlay rollback` — troca `active.json` para a versão anterior. Se não houver anterior, o comando falha e o ponteiro fica como está.
+1. `leis-mcp overlay rollback` — valida a versão anterior e só então troca `active.json`. Se a versão anterior não confere, o ponteiro fica byte a byte como estava.
 2. Reinicie o processo (`fly apps restart` só depois que esta branch estiver publicada e o revisor tiver autorizado o deploy).
 3. `leis-mcp overlay status` deve mostrar a versão anterior.
 4. Para voltar ao pacote da imagem: `leis-mcp overlay activate` e reinicie de novo.
 
-A ativação grava a versão inteira antes de trocar o ponteiro. Um processo morto no meio deixa lixo em `staging/` ou uma versão que ninguém aponta. O ponteiro antigo continua válido.
+A ativação valida hashes, metadados, proveniência e a contagem do SQLite no staging. `READY` e o rename para `versions/p-…` acontecem antes do ponteiro. Um processo morto no meio deixa lixo em `staging/`, que não é servido. Um `versions/` incompleto não é ativado no retry. O ponteiro antigo continua válido. `collect --into` não apaga um diretório qualquer: sem `--replace` recusa destino existente; com `--replace` só substitui um pacote já marcado `leis-mcp-parliamentary-bundle`. Home, clone, cache, overlay e raízes como `/` e `/data` são recusados.
 
 ## Testes desta onda
 
@@ -52,9 +53,11 @@ Ambiente: Python 3.12, `uv` 0.11.2. A integração usou `LEIS_MCP_HOME=/tmp/leis
 ```text
 uv run ruff check src tests          # passou
 uv run ruff format --check src tests # passou
-uv run pytest -m "not integration"   # 150 passed
+uv run pytest -m "not integration"   # 161 passed
 uv run pytest -m integration         # 21 passed
 ```
+
+Os 161 incluem a suíte anterior e as regressões desta correção: hash inválido e retry, índice esvaziado, ponteiro JSON inválido, versão ausente, manifesto inválido, troca de natureza/versão com o mesmo corpo, recoleta só de data, origem manual que não acompanha imagem nova, origem bundle que acompanha, rollback que não grava o ponteiro se o destino não confere, caminho `..`, symlink, destino de coleta protegido, espaço livre, citação `Art.` que não vira artigo, tachado atravessando parágrafos, ferramentas MCP (`buscar_norma`, `ler_artigo`, `buscar_texto`, `listar_normas`) e o wheel com as seis normas. A integração de 21 foi de novo contra o índice local de 1.218.990 normas.
 
 Os 150 incluem a suíte que já existia e os testes novos do overlay: recorte real do art. 7º, artigo 4º-A com texto tachado, inciso e alínea, homônimo do DF que não substitui o Congresso Nacional quando o órgão é informado, sobrevivência do overlay quando o `index.sqlite` é trocado, ativação idempotente, rollback, e recusa do coletor (HTTP, usuário na URL, IP de metadata, IP privado, redirect para `127.0.0.1`, corpo acima do teto).
 
@@ -74,4 +77,4 @@ Os HTML em `/tmp/leis-src` tinham sido baixados das URLs do inventário, com `Us
 4. Depois do deploy, com a chave que o operador já tem (não nesta execução): `/health` sem chave continua 200; `/mcp` sem chave continua 401; uma chamada autenticada a `buscar_norma` / `ler_artigo` da Resolução nº 1/2002-CN devolve o art. 7º acima e não uma norma do DF.
 5. Não agendar `overlay collect` no Fly. Atualizar o pacote é outra onda, com HTML novo, versão nova e o mesmo rollback.
 
-Se o primeiro boot da imagem nova falhar antes de gravar o ponteiro, o índice upstream segue utilizável na próxima subida: o overlay só é anexado quando o pacote abre. Uma versão ativa corrompida registra o erro e o processo segue só com o upstream; pedido com órgão do Congresso, nesse caso, não cai no homônimo do DF, porque o filtro de órgão continua e o upstream não tem esse órgão.
+Se o ponteiro estiver ilegível, a versão apontada não existir, o manifesto ou o índice estiverem incompletos, ou o hash não conferir, o processo registra o erro e sobe só com o upstream. Isso cobre `OverlayError`, JSON inválido e SQLite ilegível. Um erro do próprio índice upstream não é escondido. Pedido que nomeia o Congresso Nacional, nesse modo, não devolve o homônimo do DF. `/health` continua aberto e `/mcp` continua exigindo o Bearer.

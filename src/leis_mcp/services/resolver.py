@@ -59,7 +59,11 @@ class NormResolver:
         raw = text or (str(number) if number is not None else None)
         reference = self._parse(raw) if raw else None
         if reference and reference.path:
-            return [self._by_path(reference.path)], reference
+            norm = self._by_path(reference.path)
+            query = self.query_for(reference, year=year, kind=kind, sphere=sphere, state=state, agency=agency)
+            if not _matches_filters(norm, query):
+                return [], reference
+            return [norm], reference
         query = self.query_for(reference, year=year, kind=kind, sphere=sphere, state=state, agency=agency)
         if not query.number:
             raise QueryError(messages.NUMBER_REQUIRED)
@@ -98,3 +102,18 @@ class NormResolver:
             return False
         first, second = norms[:2]
         return (first.sphere, first.kind, first.state) == (second.sphere, second.kind, second.state)
+
+
+def _matches_filters(norm: Norm, query: NormQuery) -> bool:
+    """Explicit filters win over an alias path. A contradictory organ does not return that alias."""
+    checks = (
+        (query.agency, norm.agency),
+        (query.sphere, norm.sphere),
+        (query.kind, norm.kind),
+        (query.number, norm.number),
+        (query.state, norm.state),
+        (query.city, norm.city),
+    )
+    if any(expected is not None and actual != expected for expected, actual in checks):
+        return False
+    return not query.years or norm.year in query.years
