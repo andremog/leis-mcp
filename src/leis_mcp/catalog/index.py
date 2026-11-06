@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from contextlib import closing
 from functools import cached_property
 from itertools import batched, chain
+from pathlib import Path
 from typing import Any
 
 from .. import messages
@@ -89,10 +90,11 @@ class NormIndex:
     _SELECT = f"SELECT {', '.join(COLUMNS)} FROM norms"
     _BATCH = 500  # stays below SQLite's bound-parameter limit
 
-    def __init__(self, settings: Settings):
-        if not settings.db_path.exists():
-            raise IndexMissingError(messages.INDEX_MISSING.format(path=settings.db_path))
-        uri = f"{settings.db_path.resolve().as_uri()}?mode=ro"
+    def __init__(self, settings: Settings, *, database: Path | None = None):
+        path = database or settings.db_path
+        if not path.exists():
+            raise IndexMissingError(messages.INDEX_MISSING.format(path=path))
+        uri = f"{path.resolve().as_uri()}?mode=ro"
         self._db = sqlite3.connect(uri, uri=True, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._lock = threading.Lock()

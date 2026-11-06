@@ -13,6 +13,7 @@ from pydantic import Field
 from .. import messages
 from ..config import DEFAULT_HOST, DEFAULT_PORT, Transport
 from ..errors import LeisMcpError
+from ..references.parser import organ_slug
 from ..services.legislation import LegislationService
 from .http import ApiKeyMiddleware
 
@@ -29,7 +30,8 @@ class LeisServer:
     _READ_ONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True)
     _DESCRIPTIONS = {
         "buscar_norma": "Localiza uma norma e devolve metadados do cabeçalho (título, ementa, data, revogada, versão do "
-        "texto), caminho no repositório e link oficial da fonte.",
+        "texto), caminho e link oficial da fonte. Para resolução do Congresso, da Câmara ou do Senado, informe o órgão "
+        "na referência ('do Congresso Nacional') ou em `orgao`, para não confundir com homônimo estadual ou municipal.",
         "ler_artigo": "Devolve o texto exato de um artigo (ou parágrafo, inciso, alínea), com o caput como contexto, "
         "link da fonte e avisos de revogação ou texto não compilado.",
         "buscar_texto": "Busca um termo dentro de uma norma, ou nas normas já em cache local, indicando o artigo de "
@@ -100,9 +102,16 @@ class LeisServer:
             Field(description="federal, estaduais, municipais, reguladores, jurisprudencia ou tratados."),
         ] = None,
         uf: Annotated[str | None, Field(description="UF, para normas estaduais (ex.: 'SP').")] = None,
+        orgao: Annotated[
+            str | None,
+            Field(
+                description="Órgão do acervo parlamentar: 'congresso-nacional', 'camara-dos-deputados' ou "
+                "'senado-federal'. Também aceita o nome ('Congresso Nacional')."
+            ),
+        ] = None,
         limite: Annotated[int, Field(description=f"Máximo de resultados (1 a {LegislationService.MAX_FOUND}).")] = 10,
     ) -> dict[str, Any]:
-        return self._service.find_norms(referencia, numero, ano, tipo, esfera, uf, limite)
+        return self._service.find_norms(referencia, numero, ano, tipo, esfera, uf, limite, organ_slug(orgao))
 
     def read_article(
         self,
@@ -141,11 +150,14 @@ class LeisServer:
         tipo: Annotated[str | None, Field(description="Filtro de tipo.")] = None,
         ano: Annotated[int | None, Field(description="Filtro de ano.")] = None,
         uf: Annotated[str | None, Field(description="Filtro de UF.")] = None,
+        orgao: Annotated[
+            str | None, Field(description="Órgão do acervo parlamentar (ex.: 'congresso-nacional').")
+        ] = None,
         limite: Annotated[
             int, Field(description=f"Máximo de ocorrências (1 a {LegislationService.MAX_OCCURRENCES}).")
         ] = 20,
     ) -> dict[str, Any]:
-        return self._service.search_text(consulta, norma, esfera, tipo, ano, uf, limite)
+        return self._service.search_text(consulta, norma, esfera, tipo, ano, uf, limite, organ_slug(orgao))
 
     def browse(
         self,

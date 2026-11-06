@@ -3,10 +3,7 @@
 import pytest
 
 from leis_mcp import messages
-from leis_mcp.catalog import NormIndex
 from leis_mcp.errors import QueryError
-from leis_mcp.references import ReferenceParser
-from leis_mcp.services import NormResolver
 
 pytestmark = pytest.mark.integration
 
@@ -94,9 +91,9 @@ def test_find_by_number_and_year(service):
     assert results[0]["ementa"].startswith("Dispõe sobre as locações dos imóveis urbanos")
 
 
-def test_every_alias_resolves_to_a_federal_norm(settings, service):
-    resolver = NormResolver(NormIndex(settings), ReferenceParser())
-    assert all(resolver.resolve(alias)[0].sphere == "federal" for alias in service.aliases())
+def test_every_alias_resolves_to_a_federal_norm(service):
+    # The service resolver sees the parliamentary overlay; a bare upstream index does not.
+    assert all(service._resolver.resolve(alias)[0].sphere == "federal" for alias in service.aliases())
 
 
 def test_clear_errors(service):

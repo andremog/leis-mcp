@@ -10,7 +10,23 @@ from ..text import TextNormalizer
 from .aliases import CONSTITUTION_ALIASES, FEDERAL_LAW_ALIASES, KIND_ALIASES
 
 
+def organ_slug(value: str | None) -> str | None:
+    """'Congresso Nacional' or 'cn' -> 'congresso-nacional'. Unknown text is hyphenated and lowercased."""
+    if not value or not str(value).strip():
+        return None
+    _remainder, organ = ReferenceParser._extract_organ(TextNormalizer.normalize(str(value)))
+    if organ:
+        return organ
+    return TextNormalizer.normalize(str(value)).replace(" ", "-") or None
+
+
 class ReferenceParser:
+    # One organ per reference. Two different organs leave the text unchanged and the organ unset.
+    _ORGANS = (
+        ("congresso-nacional", re.compile(r"\b(?:do\s+)?congresso\s+nacional\b|\bcn\b|-cn\b")),
+        ("camara-dos-deputados", re.compile(r"\b(?:da\s+)?camara\s+dos\s+deputados\b|\bcamara\b|-cd\b")),
+        ("senado-federal", re.compile(r"\b(?:do\s+)?senado\s+federal\b|\bsenado\b|-sf\b")),
+    )
     _NUMBER = r"\d{1,3}(?:\.\d{3})+|\d+"
     _KINDS = "|".join(re.escape(kind) for kind in sorted(KIND_ALIASES, key=len, reverse=True))
     # "lei n 8.245/91", "8245 de 1991", "dl 5452", "decreto 9.000, de 08/05/2017"
@@ -23,8 +39,9 @@ class ReferenceParser:
     _LONG_FORM_YEAR = re.compile(r"\b(1[89]\d\d|20\d\d)\b")
     _NOISE = re.compile(r"\s*\b(?:federal|ordinaria)\b")
 
-    def __init__(self, current_year: int | None = None):
+    def __init__(self, current_year: int | None = None, extra_aliases: dict[str, Reference] | None = None):
         self._current_year = current_year or date.today().year
+        self._extra_aliases = dict(extra_aliases or {})
         self._aliases = self._alias_index()
 
     def parse(self, text: str) -> Reference | None:
@@ -32,7 +49,15 @@ class ReferenceParser:
         if raw.endswith(".md"):
             return Reference(path=raw.lstrip("/"))
         key = TextNormalizer.normalize(raw)
-        return self._aliases.get(key) or self._parse_compact(self._NOISE.sub("", key)) or self._parse_long_form(key)
+        if alias := self._aliases.get(key):
+            return alias
+        key, organ = self._extract_organ(key)
+        key = self._NOISE.sub("", key)
+        key = re.sub(r"\s+", " ", key).strip(" -")
+        reference = self._parse_compact(key) or self._parse_long_form(key)
+        if reference is not None and organ:
+            return replace(reference, organ=organ)
+        return reference
 
     def kind_directory(self, kind: str | None) -> str | None:
         """'lei' / 'Lei Complementar' / 'leis-ordinarias' -> repository directory name."""
@@ -78,8 +103,7 @@ class ReferenceParser:
             kind=KIND_ALIASES[match["kind"]],
         )
 
-    @staticmethod
-    def _alias_index() -> dict[str, Reference]:
+    def _alias_index(self) -> dict[str, Reference]:
         laws = {
             Reference(kind=kind, number=number, years=(year,), sphere="federal"): aliases
             for (kind, number, year), aliases in FEDERAL_LAW_ALIASES.items()
@@ -89,7 +113,22 @@ class ReferenceParser:
             for (path, block), aliases in CONSTITUTION_ALIASES.items()
         }
         pairs = chain.from_iterable(zip(aliases, repeat(target)) for target, aliases in (laws | constitution).items())
-        return {TextNormalizer.normalize(alias): replace(target, alias=alias) for alias, target in pairs}
+        index = {TextNormalizer.normalize(alias): replace(target, alias=alias) for alias, target in pairs}
+        for alias, reference in self._extra_aliases.items():
+            key = TextNormalizer.normalize(alias)
+            if key not in index:
+                index[key] = replace(reference, alias=alias)
+        return index
+
+    @classmethod
+    def _extract_organ(cls, key: str) -> tuple[str, str | None]:
+        found = [slug for slug, pattern in cls._ORGANS if pattern.search(key)]
+        unique = list(dict.fromkeys(found))
+        if len(unique) != 1:
+            return key, None
+        slug = unique[0]
+        pattern = next(item for item in cls._ORGANS if item[0] == slug)[1]
+        return pattern.sub(" ", key), slug
 
     @staticmethod
     def _describe(reference: Reference) -> str:

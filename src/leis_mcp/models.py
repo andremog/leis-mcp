@@ -24,6 +24,13 @@ class SourceField(StrEnum):
     URN = "urn"
     STATE = "uf"
     DOWNLOADED_AT = "baixado_em"
+    # Parliamentary overlay. Absent on upstream norms.
+    IDENTIFIER = "identificador"
+    ORGAN = "orgao"
+    VIGENCIA = "vigencia"
+    TEXT_NATURE = "natureza_texto"
+    COLLECTED_AT = "coletado_em"
+    CONTENT_HASH = "hash_conteudo"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -79,6 +86,7 @@ class Reference:
     path: str | None = None
     block: str | None = None
     alias: str | None = None
+    organ: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

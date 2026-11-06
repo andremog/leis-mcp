@@ -1,0 +1,260 @@
+{
+  "version": "p-b7441d4e7f37f9a3c6de",
+  "not_exhaustive": true,
+  "norms": [
+    {
+      "canonical_id": "br:federal:congresso-nacional:resolucao:1:2002",
+      "path": "parlamentar/federal/congresso-nacional/resolucoes/2002/resolucao-1-2002.md",
+      "blob": "1aab91c64292d3e598f9f728f9718608dbb3400f",
+      "organ": "congresso-nacional",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "number": "1",
+      "year": 2002,
+      "date": "2002-05-08",
+      "source_url": "https://www2.camara.leg.br/legin/fed/rescon/2002/resolucao-1-8-maio-2002-497942-normaatualizada-pl.html",
+      "fetched_at": "2026-11-06T21:35:27Z",
+      "body_sha256": "5594a3c7546fb573fb7ac262b3fb844b71a50696ea58b3a6757370c7017d79b8",
+      "text_nature": "consolidado_pela_fonte",
+      "vigencia": "nao_verificada",
+      "aliases": [
+        "resolucao 1/2002-cn",
+        "res 1/2002-cn"
+      ],
+      "provenance": {
+        "canonical_id": "br:federal:congresso-nacional:resolucao:1:2002",
+        "source_url": "https://www2.camara.leg.br/legin/fed/rescon/2002/resolucao-1-8-maio-2002-497942-normaatualizada-pl.html",
+        "fetched_url": "https://www2.camara.leg.br/legin/fed/rescon/2002/resolucao-1-8-maio-2002-497942-normaatualizada-pl.html",
+        "fetched_at": "2026-11-06T21:35:27Z",
+        "raw_sha256": "390f6a836f9cb6549e245a3d56b4ce1a63262cb6be772706dfcfcc7d0f772510",
+        "body_sha256": "5594a3c7546fb573fb7ac262b3fb844b71a50696ea58b3a6757370c7017d79b8",
+        "text_nature": "consolidado_pela_fonte",
+        "vigencia": "nao_verificada",
+        "historical_url": "https://www2.camara.leg.br/legin/fed/rescon/2002/resolucao-1-8-maio-2002-497942-publicacaooriginal-1-pl.html",
+        "notes": "Pilot. Página norma atualizada. A publicação original fica só como URL histórica para não haver duas identidades 1/2002-CN no índice."
+      }
+    },
+    {
+      "canonical_id": "br:federal:congresso-nacional:resolucao:1:1970",
+      "path": "parlamentar/federal/congresso-nacional/resolucoes/1970/resolucao-1-1970.md",
+      "blob": "8df85d93a671c0fc519cbf747568a1d1641c5deb",
+      "organ": "congresso-nacional",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "number": "1",
+      "year": 1970,
+      "date": "1970-08-11",
+      "source_url": "https://www2.camara.leg.br/legin/fed/rescon/1970-1979/resolucao-1-11-agosto-1970-497934-republicacaoatualizada-171822-pl.html",
+      "fetched_at": "2026-11-06T21:35:33Z",
+      "body_sha256": "a427ec6d1125dd06e83d5f7a23a4e1183b277534600fd32fc08384c5ee7dc806",
+      "text_nature": "consolidado_pela_fonte",
+      "vigencia": "nao_verificada",
+      "aliases": [
+        "regimento comum",
+        "regimento comum do congresso nacional",
+        "resolucao 1/1970-cn"
+      ],
+      "provenance": {
+        "canonical_id": "br:federal:congresso-nacional:resolucao:1:1970",
+        "source_url": "https://www2.camara.leg.br/legin/fed/rescon/1970-1979/resolucao-1-11-agosto-1970-497934-republicacaoatualizada-171822-pl.html",
+        "fetched_url": "https://www2.camara.leg.br/legin/fed/rescon/1970-1979/resolucao-1-11-agosto-1970-497934-republicacaoatualizada-171822-pl.html",
+        "fetched_at": "2026-11-06T21:35:33Z",
+        "raw_sha256": "04aae7a1154ad9d87ab1936d37e52d50e8d3a208dcb887c942c15d6379e0b927",
+        "body_sha256": "a427ec6d1125dd06e83d5f7a23a4e1183b277534600fd32fc08384c5ee7dc806",
+        "text_nature": "consolidado_pela_fonte",
+        "vigencia": "nao_verificada",
+        "historical_url": null,
+        "notes": "Cobre sessão conjunta, comissões mistas e o prazo de veto no art. 104-A. Não incorpora o PDF do Senado atualizado até julho de 2025."
+      }
+    },
+    {
+      "canonical_id": "br:federal:congresso-nacional:resolucao:1:2006",
+      "path": "parlamentar/federal/congresso-nacional/resolucoes/2006/resolucao-1-2006.md",
+      "blob": "f91a39c155d269a4727b4e17fadd75c419826ba0",
+      "organ": "congresso-nacional",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "number": "1",
+      "year": 2006,
+      "date": "2006-12-22",
+      "source_url": "https://www2.camara.leg.br/legin/fed/rescon/2006/resolucao-1-22-dezembro-2006-548706-normaatualizada-pl.html",
+      "fetched_at": "2026-11-06T21:35:26Z",
+      "body_sha256": "fca4d66354beef75be0588a2285692ba1960080ef8f2e915eccc3c65e6cf9a15",
+      "text_nature": "consolidado_pela_fonte",
+      "vigencia": "nao_verificada",
+      "aliases": [
+        "resolucao 1/2006-cn"
+      ],
+      "provenance": {
+        "canonical_id": "br:federal:congresso-nacional:resolucao:1:2006",
+        "source_url": "https://www2.camara.leg.br/legin/fed/rescon/2006/resolucao-1-22-dezembro-2006-548706-normaatualizada-pl.html",
+        "fetched_url": "https://www2.camara.leg.br/legin/fed/rescon/2006/resolucao-1-22-dezembro-2006-548706-normaatualizada-pl.html",
+        "fetched_at": "2026-11-06T21:35:26Z",
+        "raw_sha256": "4e5f4c8430b943e599171603e26a2344f1a9e7dff0ed98ba9be1153f39d022ee",
+        "body_sha256": "fca4d66354beef75be0588a2285692ba1960080ef8f2e915eccc3c65e6cf9a15",
+        "text_nature": "consolidado_pela_fonte",
+        "vigencia": "nao_verificada",
+        "historical_url": null,
+        "notes": "CMO e tramitação orçamentária. O HTML traz notas de alteração, inclusive de 2025. O catálogo diz 'Não consta revogação expressa'; isso não foi tratado como verificação de vigência."
+      }
+    },
+    {
+      "canonical_id": "br:federal:camara-dos-deputados:resolucao:17:1989",
+      "path": "parlamentar/federal/camara-dos-deputados/resolucoes/1989/resolucao-17-1989.md",
+      "blob": "b1cf06be2323faf16eb5afcfebbfa9c971d00d64",
+      "organ": "camara-dos-deputados",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "number": "17",
+      "year": 1989,
+      "date": "1989-09-21",
+      "source_url": "https://www2.camara.leg.br/legin/fed/rescad/1989/resolucaodacamaradosdeputados-17-21-setembro-1989-320110-normaatualizada-pl.html",
+      "fetched_at": "2026-11-06T21:35:24Z",
+      "body_sha256": "a7f7b5cbbbe94672334c072c4805137d33e4e42a9a466b47c7d2650afa360ec9",
+      "text_nature": "consolidado_pela_fonte",
+      "vigencia": "nao_verificada",
+      "aliases": [
+        "ricd",
+        "regimento interno da camara",
+        "regimento interno da camara dos deputados",
+        "resolucao 17/1989 da camara"
+      ],
+      "provenance": {
+        "canonical_id": "br:federal:camara-dos-deputados:resolucao:17:1989",
+        "source_url": "https://www2.camara.leg.br/legin/fed/rescad/1989/resolucaodacamaradosdeputados-17-21-setembro-1989-320110-normaatualizada-pl.html",
+        "fetched_url": "https://www2.camara.leg.br/legin/fed/rescad/1989/resolucaodacamaradosdeputados-17-21-setembro-1989-320110-normaatualizada-pl.html",
+        "fetched_at": "2026-11-06T21:35:24Z",
+        "raw_sha256": "e95d7b34dd5fdfeae4892cc4e3893c56eb9f1c28cb418af22639a8c7846639d9",
+        "body_sha256": "a7f7b5cbbbe94672334c072c4805137d33e4e42a9a466b47c7d2650afa360ec9",
+        "text_nature": "consolidado_pela_fonte",
+        "vigencia": "nao_verificada",
+        "historical_url": null,
+        "notes": "Texto da resolução que aprova o regimento e o regimento anexo. A numeração reinicia; ler_artigo sem bloco devolve o maior bloco e avisa a duplicidade."
+      }
+    },
+    {
+      "canonical_id": "br:federal:camara-dos-deputados:resolucao:25:2001",
+      "path": "parlamentar/federal/camara-dos-deputados/resolucoes/2001/resolucao-25-2001.md",
+      "blob": "ca8db0f96fcee98b0f92c3589ab564b519fea48c",
+      "organ": "camara-dos-deputados",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "number": "25",
+      "year": 2001,
+      "date": "2001-10-10",
+      "source_url": "https://www2.camara.leg.br/legin/fed/rescad/2001/resolucaodacamaradosdeputados-25-10-outubro-2001-320496-normaatualizada-pl.html",
+      "fetched_at": "2026-11-06T21:35:25Z",
+      "body_sha256": "58dacbb9527cbdbd4f06e3f165900e104b949ba2be519f3fbeee2dc315154bdd",
+      "text_nature": "consolidado_pela_fonte",
+      "vigencia": "nao_verificada",
+      "aliases": [
+        "codigo de etica da camara",
+        "codigo de etica e decoro parlamentar da camara"
+      ],
+      "provenance": {
+        "canonical_id": "br:federal:camara-dos-deputados:resolucao:25:2001",
+        "source_url": "https://www2.camara.leg.br/legin/fed/rescad/2001/resolucaodacamaradosdeputados-25-10-outubro-2001-320496-normaatualizada-pl.html",
+        "fetched_url": "https://www2.camara.leg.br/legin/fed/rescad/2001/resolucaodacamaradosdeputados-25-10-outubro-2001-320496-normaatualizada-pl.html",
+        "fetched_at": "2026-11-06T21:35:25Z",
+        "raw_sha256": "2a6e1344209f4c5d76502a31f0e3c99c2c1fcd3b03577be063e7cf04a7f9b80a",
+        "body_sha256": "58dacbb9527cbdbd4f06e3f165900e104b949ba2be519f3fbeee2dc315154bdd",
+        "text_nature": "consolidado_pela_fonte",
+        "vigencia": "nao_verificada",
+        "historical_url": null,
+        "notes": "A resolução e o código anexo reiniciam a numeração dos artigos."
+      }
+    },
+    {
+      "canonical_id": "br:federal:senado-federal:resolucao:20:1993",
+      "path": "parlamentar/federal/senado-federal/resolucoes/1993/resolucao-20-1993.md",
+      "blob": "3a96fe7387b527b83faddf56c3340a38de2c491a",
+      "organ": "senado-federal",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "number": "20",
+      "year": 1993,
+      "date": "1993-03-17",
+      "source_url": "https://www2.camara.leg.br/legin/fed/ressen/1993/resolucao-20-17-marco-1993-481141-publicacaooriginal-1-pl.html",
+      "fetched_at": "2026-11-06T21:34:22Z",
+      "body_sha256": "8bc0fa68708ab13265b71bbd420da0585528cceacd331bac10f517f67c9b21a0",
+      "text_nature": "historico",
+      "vigencia": "nao_verificada",
+      "aliases": [
+        "codigo de etica do senado",
+        "codigo de etica e decoro parlamentar do senado",
+        "resolucao 20/1993 do senado"
+      ],
+      "provenance": {
+        "canonical_id": "br:federal:senado-federal:resolucao:20:1993",
+        "source_url": "https://www2.camara.leg.br/legin/fed/ressen/1993/resolucao-20-17-marco-1993-481141-publicacaooriginal-1-pl.html",
+        "fetched_url": "https://www2.camara.leg.br/legin/fed/ressen/1993/resolucao-20-17-marco-1993-481141-publicacaooriginal-1-pl.html",
+        "fetched_at": "2026-11-06T21:34:22Z",
+        "raw_sha256": "ec1ac55c58e401135812763b3928cb8fc2a4c0a1f027c817be1a696e3da2e11c",
+        "body_sha256": "8bc0fa68708ab13265b71bbd420da0585528cceacd331bac10f517f67c9b21a0",
+        "text_nature": "historico",
+        "vigencia": "nao_verificada",
+        "historical_url": "https://legis.senado.leg.br/norma/561878",
+        "notes": "Não é o texto consolidado. Ficha no Senado: https://legis.senado.leg.br/norma/561878"
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "canonical_id": "br:federal:senado-federal:resolucao:93:1970",
+      "titulo": "Resolução nº 93, de 1970 (Regimento Interno do Senado Federal)",
+      "coletado": false,
+      "motivo": "O texto consolidado oficial desta onda está em PDF, RTF e ePub, não no HTML da Câmara que o normalizador cobre. Não foi convertido.",
+      "urls": [
+        "https://www.congressonacional.leg.br/web/atividade/legislacao/regimento-interno",
+        "https://www2.senado.leg.br/bdsf/handle/id/816709",
+        "https://www25.senado.leg.br/documents/12427/45868/RISFCompilado.pdf/cd5769c8-46c5-4c8a-9af7-99be436b89c4"
+      ]
+    },
+    {
+      "canonical_id": "br:federal:senado-federal:resolucao:40:2001",
+      "titulo": "Resolução do Senado Federal nº 40, de 2001",
+      "coletado": false,
+      "motivo": "Ficha e republicação localizadas; o texto não passou pelo normalizador nesta onda.",
+      "urls": [
+        "https://legis.senado.leg.br/norma/562458",
+        "https://legis.senado.leg.br/norma/562458/publicacao/16433576"
+      ]
+    },
+    {
+      "canonical_id": "br:federal:senado-federal:resolucao:43:2001",
+      "titulo": "Resolução do Senado Federal nº 43, de 2001",
+      "coletado": false,
+      "motivo": "Não coletada. URL do texto estruturado não confirmada por download nesta onda."
+    },
+    {
+      "canonical_id": "br:federal:senado-federal:resolucao:48:2007",
+      "titulo": "Resolução do Senado Federal nº 48, de 2007",
+      "coletado": false,
+      "motivo": "Não coletada. URL do texto estruturado não confirmada por download nesta onda."
+    },
+    {
+      "canonical_id": "br:federal:congresso-nacional:resolucao:1:2011",
+      "titulo": "Resolução nº 1, de 2011-CN (Parlasul)",
+      "coletado": false,
+      "motivo": "Citada na página de regimentos do Congresso Nacional; o HTML da norma não foi coletado nesta onda.",
+      "urls": [
+        "https://www.congressonacional.leg.br/legislacao-e-publicacoes/regimento-do-congresso-nacional"
+      ]
+    },
+    {
+      "titulo": "Atos da Mesa, cota, CEAP, gabinete, pessoal, viagens, questões de ordem e súmulas",
+      "coletado": false,
+      "motivo": "Fora da primeira onda. Não há coleta seletiva dessas séries nesta versão."
+    },
+    {
+      "titulo": "LC 95/1998, Lei 1.579/1952 e Lei 1.079/1950",
+      "coletado": false,
+      "motivo": "Não entraram no overlay. São leis federais que o acervo ctresb/leis costuma ter; esta execução não conferiu o índice upstream local."
+    },
+    {
+      "titulo": "Vetos como série própria",
+      "coletado": false,
+      "motivo": "Não há inventário de vetos. O Regimento Comum indexado traz o rito, inclusive o art. 104-A."
+    }
+  ]
+}

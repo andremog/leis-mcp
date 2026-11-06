@@ -1,0 +1,12 @@
+{
+  "canonical_id": "br:federal:congresso-nacional:resolucao:1:2002",
+  "source_url": "https://www2.camara.leg.br/legin/fed/rescon/2002/resolucao-1-8-maio-2002-497942-normaatualizada-pl.html",
+  "fetched_url": "https://www2.camara.leg.br/legin/fed/rescon/2002/resolucao-1-8-maio-2002-497942-normaatualizada-pl.html",
+  "fetched_at": "2026-11-06T21:35:27Z",
+  "raw_sha256": "390f6a836f9cb6549e245a3d56b4ce1a63262cb6be772706dfcfcc7d0f772510",
+  "body_sha256": "5594a3c7546fb573fb7ac262b3fb844b71a50696ea58b3a6757370c7017d79b8",
+  "text_nature": "consolidado_pela_fonte",
+  "vigencia": "nao_verificada",
+  "historical_url": "https://www2.camara.leg.br/legin/fed/rescon/2002/resolucao-1-8-maio-2002-497942-publicacaooriginal-1-pl.html",
+  "notes": "Pilot. Página norma atualizada. A publicação original fica só como URL histórica para não haver duas identidades 1/2002-CN no índice."
+}

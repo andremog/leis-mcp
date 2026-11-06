@@ -6,7 +6,7 @@ from .. import messages
 from ..catalog.index import NormIndex
 from ..errors import QueryError
 from ..models import Norm, NormQuery, Reference
-from ..references.parser import ReferenceParser
+from ..references.parser import ReferenceParser, organ_slug
 
 
 class NormResolver:
@@ -33,14 +33,14 @@ class NormResolver:
     ) -> NormQuery:
         """Index query from a reference plus explicit filters, which take precedence."""
         base = reference or Reference()
-        query = NormQuery(number=base.number, years=base.years, kind=base.kind, sphere=base.sphere)
+        query = NormQuery(number=base.number, years=base.years, kind=base.kind, sphere=base.sphere, agency=base.organ)
         overrides = {
             "years": (int(year),) if year else None,
             "kind": self._references.kind_directory(kind),
             "state": state.upper() if state else None,
             "sphere": sphere or ("estaduais" if state else None),
             "city": city,
-            "agency": agency,
+            "agency": organ_slug(agency) if agency else None,
         }
         return replace(query, **{field: value for field, value in overrides.items() if value})
 
@@ -53,13 +53,14 @@ class NormResolver:
         kind: str | None = None,
         sphere: str | None = None,
         state: str | None = None,
+        agency: str | None = None,
         limit: int = 10,
     ) -> tuple[list[Norm], Reference | None]:
         raw = text or (str(number) if number is not None else None)
         reference = self._parse(raw) if raw else None
         if reference and reference.path:
             return [self._by_path(reference.path)], reference
-        query = self.query_for(reference, year=year, kind=kind, sphere=sphere, state=state)
+        query = self.query_for(reference, year=year, kind=kind, sphere=sphere, state=state, agency=agency)
         if not query.number:
             raise QueryError(messages.NUMBER_REQUIRED)
         norms = self._index.find(query, limit)

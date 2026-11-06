@@ -14,6 +14,7 @@ from ..content.store import ContentStore
 from ..errors import ProvisionNotFoundError, QueryError
 from ..legal_text.extractor import ProvisionExtractor
 from ..models import LoadedNorm, Norm, NormQuery, Occurrence, SearchMatch, SourceField
+from ..overlay.catalog import CompositeIndex, attach
 from ..references.parser import ReferenceParser
 from ..search.text_search import TextSearch
 from .loader import NormLoader
@@ -39,7 +40,7 @@ class LegislationService:
 
     def __init__(
         self,
-        index: NormIndex,
+        index: NormIndex | CompositeIndex,
         references: ReferenceParser,
         store: ContentStore,
         presenter: NormPresenter,
@@ -57,10 +58,10 @@ class LegislationService:
 
     @classmethod
     def from_settings(cls, settings: Settings, repository: GitRepository | None = None) -> Self:
-        index = NormIndex(settings)
-        store = ContentStore(settings, index.commit, repository or GitRepository(settings))
+        repository = repository or GitRepository(settings)
+        index, store, aliases = attach(settings, repository)
         presenter = NormPresenter(settings.blob_base_url, index.commit)
-        return cls(index, ReferenceParser(), store, presenter, TextSearch(), settings.home)
+        return cls(index, ReferenceParser(extra_aliases=aliases), store, presenter, TextSearch(), settings.home)
 
     def find_norms(
         self,
@@ -71,6 +72,7 @@ class LegislationService:
         sphere: str | None = None,
         state: str | None = None,
         limit: int = 10,
+        agency: str | None = None,
     ) -> dict[str, Any]:
         norms, parsed = self._resolver.find(
             reference,
@@ -79,6 +81,7 @@ class LegislationService:
             kind=kind,
             sphere=sphere,
             state=state,
+            agency=agency,
             limit=self._clamp(limit, self.MAX_FOUND),
         )
         if not norms:
@@ -118,10 +121,11 @@ class LegislationService:
         year: int | None = None,
         state: str | None = None,
         limit: int = 20,
+        agency: str | None = None,
     ) -> dict[str, Any]:
         if len((query or "").strip()) < self.MIN_QUERY_LENGTH:
             raise QueryError(messages.QUERY_TOO_SHORT.format(minimum=self.MIN_QUERY_LENGTH))
-        filters = self._resolver.query_for(year=year, kind=kind, sphere=sphere, state=state)
+        filters = self._resolver.query_for(year=year, kind=kind, sphere=sphere, state=state, agency=agency)
         norms, scope = self._search_scope(norm, filters)
         by_file: dict[Path, list[Norm]] = defaultdict(list)  # identical texts share one cached blob
         for item in norms:

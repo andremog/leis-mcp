@@ -46,4 +46,9 @@ class NormNotices:
             return None
         return messages.NOT_CONSOLIDATED.format(version=version)
 
-    _CHECKS: tuple[Callable[[dict[str, Any]], str | None], ...] = (_revoked, _status, _version)
+    @staticmethod
+    def _vigencia(metadata: dict[str, Any]) -> str | None:
+        vigencia = str(metadata.get(SourceField.VIGENCIA) or "")
+        return messages.VIGENCIA_UNKNOWN if vigencia == "nao_verificada" else None
+
+    _CHECKS: tuple[Callable[[dict[str, Any]], str | None], ...] = (_revoked, _status, _version, _vigencia)
