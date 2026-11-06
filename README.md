@@ -332,6 +332,19 @@ uv run pytest                        # tudo, incluindo integração com conteúd
 
 Os testes de integração usam o índice de `LEIS_MCP_HOME` e são pulados se ele não existir. Eles cobrem a Lei 8.245/91 (art. 23, III e art. 38, § 2º), o CDC (art. 20, I), o CC (arts. 422 e 1.000), a Lei 9.099/95 (art. 9º), a CLT, a CF e o ADCT, e todos os apelidos. O teste e2e sobe o servidor por stdio com o cliente MCP oficial e chama todas as ferramentas.
 
+## Acervo parlamentar
+
+O repositório [ctresb/leis](https://github.com/ctresb/leis) não trazia a Resolução nº 1, de 2002-CN. Uma busca por número, ano e tipo no filtro federal voltava vazia, e a referência sem órgão esbarrava em homônimos do Distrito Federal e de municípios.
+
+O leis-mcp passa a ter um **overlay parlamentar** em `LEIS_MCP_HOME/overlay`, separado do clone e do `index.sqlite`. O `leis-mcp update` reindexa só o acervo upstream e não apaga esse diretório. Na primeira subida, se não houver ponteiro ativo, o servidor instala o pacote que vem na imagem (hoje seis normas, começando pela Resolução nº 1/2002-CN). Não é um acervo exaustivo e a vigência de cada texto fica `nao_verificada` enquanto não houver conferência independente.
+
+Para não receber o homônimo errado, nomeie o órgão: `Resolução nº 1/2002 do Congresso Nacional`, `resolucao 1/2002-cn`, ou `orgao=congresso-nacional`. Detalhes, lacunas e rollback: [docs/parlamentar/arquitetura.md](docs/parlamentar/arquitetura.md), [inventário](docs/parlamentar/inventario.md) e [operação](docs/parlamentar/operacao.md).
+
+```bash
+leis-mcp overlay status
+leis-mcp overlay rollback    # volta a versão anterior; reinicie o processo depois
+```
+
 ## Limitações
 
 - **Busca textual sem o acervo inteiro:** `buscar_texto` sem `norma` procura só nas normas já em cache. Baixar as 1,2 M normas não é viável. Use `warm` para ampliar o cache. Não há busca semântica nem embeddings.
@@ -341,6 +354,7 @@ Os testes de integração usam o índice de `LEIS_MCP_HOME` e são pulados se el
 - **Revogação:** o aviso depende do cabeçalho (`revogada`, `versao_texto`) e das notas no próprio texto. Não há verificação independente de vigência.
 - **Metadados de normas não federais:** o número e a data de normas estaduais, municipais e de reguladores vêm de heurísticas sobre o nome do arquivo.
 - **Rede:** o conteúdo vem do `raw.githubusercontent.com`, que pode impor limite de requisições. O que já está em cache funciona offline.
+- **Acervo parlamentar:** cobre um núcleo (Resolução nº 1/2002-CN, Regimento Comum, Resolução nº 1/2006-CN, RICD, códigos de ética da Câmara e do Senado). Não inclui o RISF, várias resoluções do Senado, atos de Mesa, cotas, questões de ordem nem súmulas. A vigência não foi verificada de forma independente.
 
 ## Créditos
 

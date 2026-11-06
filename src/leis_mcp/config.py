@@ -51,6 +51,11 @@ class Settings:
         return self.home / "cache"
 
     @property
+    def overlay_dir(self) -> Path:
+        """Parliamentary overlay. `leis-mcp update` rebuilds `index.sqlite` and does not touch this directory."""
+        return self.home / "overlay"
+
+    @property
     def blob_base_url(self) -> str:
         """Base of GitHub file links: `<blob_base_url>/<commit>/<path>`."""
         return f"{self.repo_url}/blob"

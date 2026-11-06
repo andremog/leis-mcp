@@ -19,12 +19,14 @@ class Label(ABC):
     """A provision label: parses user input and recognizes the label at the start of a source line."""
 
     _MARKUP = re.compile(r"^\s*[*_]+\s*")
+    _STRIKE_EDGE = re.compile(r"^(?:~~\s*)+|(?:\s*~~)+$")
     # Ordinal marker and letter suffix right after a number: "º-A.", "o", ".º"
     _SUFFIX = re.compile(r"^\s*(?:\.?\s*[º°ª]|o(?![a-zà-ú]))?\s*\.?\s*(?P<suffix>(?:-[A-Z](?![a-zà-ú]))*)")
 
     @classmethod
     def strip_markup(cls, text: str) -> str:
-        return cls._MARKUP.sub("", text)
+        """Drops emphasis and a wrapping `~~` so a struck provision is still addressable."""
+        return cls._STRIKE_EDGE.sub("", cls._MARKUP.sub("", text))
 
     @classmethod
     def suffix(cls, rest: str) -> str:

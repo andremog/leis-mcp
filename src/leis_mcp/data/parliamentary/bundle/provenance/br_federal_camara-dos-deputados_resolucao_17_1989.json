@@ -1,0 +1,12 @@
+{
+  "canonical_id": "br:federal:camara-dos-deputados:resolucao:17:1989",
+  "source_url": "https://www2.camara.leg.br/legin/fed/rescad/1989/resolucaodacamaradosdeputados-17-21-setembro-1989-320110-normaatualizada-pl.html",
+  "fetched_url": "https://www2.camara.leg.br/legin/fed/rescad/1989/resolucaodacamaradosdeputados-17-21-setembro-1989-320110-normaatualizada-pl.html",
+  "fetched_at": "2026-11-06T21:35:24Z",
+  "raw_sha256": "e95d7b34dd5fdfeae4892cc4e3893c56eb9f1c28cb418af22639a8c7846639d9",
+  "body_sha256": "a7f7b5cbbbe94672334c072c4805137d33e4e42a9a466b47c7d2650afa360ec9",
+  "text_nature": "consolidado_pela_fonte",
+  "vigencia": "nao_verificada",
+  "historical_url": null,
+  "notes": "Texto da resolução que aprova o regimento e o regimento anexo. A numeração reinicia; ler_artigo sem bloco devolve o maior bloco e avisa a duplicidade."
+}

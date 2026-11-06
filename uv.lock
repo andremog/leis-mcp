@@ -347,6 +347,7 @@ name = "leis-mcp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpcore" },
     { name = "httpx" },
     { name = "mcp", extra = ["cli"] },
     { name = "pyyaml" },
@@ -360,6 +361,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpcore", specifier = "==1.0.9" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mcp", extras = ["cli"], specifier = ">=2.3.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },

@@ -1,0 +1,12 @@
+{
+  "canonical_id": "br:federal:congresso-nacional:resolucao:1:2006",
+  "source_url": "https://www2.camara.leg.br/legin/fed/rescon/2006/resolucao-1-22-dezembro-2006-548706-normaatualizada-pl.html",
+  "fetched_url": "https://www2.camara.leg.br/legin/fed/rescon/2006/resolucao-1-22-dezembro-2006-548706-normaatualizada-pl.html",
+  "fetched_at": "2026-11-06T21:35:26Z",
+  "raw_sha256": "4e5f4c8430b943e599171603e26a2344f1a9e7dff0ed98ba9be1153f39d022ee",
+  "body_sha256": "fca4d66354beef75be0588a2285692ba1960080ef8f2e915eccc3c65e6cf9a15",
+  "text_nature": "consolidado_pela_fonte",
+  "vigencia": "nao_verificada",
+  "historical_url": null,
+  "notes": "CMO e tramitação orçamentária. O HTML traz notas de alteração, inclusive de 2025. O catálogo diz 'Não consta revogação expressa'; isso não foi tratado como verificação de vigência."
+}
