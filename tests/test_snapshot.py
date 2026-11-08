@@ -3,6 +3,7 @@ import hashlib
 import json
 import sqlite3
 import threading
+import time
 from contextlib import closing
 from pathlib import Path
 
@@ -11,35 +12,36 @@ import httpx
 import pytest
 
 from leis_mcp.catalog import IndexSnapshot
+from leis_mcp.catalog.index import COLUMNS, IndexBuilder
+from leis_mcp.catalog.path_parser import PathParser
 from leis_mcp.catalog.snapshot import Limits
 from leis_mcp.cli import Cli
 from leis_mcp.config import Settings
-from leis_mcp.errors import IndexPreparingError, SnapshotError, SnapshotResourceError
+from leis_mcp.errors import GitError, IndexPreparingError, SnapshotError, SnapshotResourceError
 from leis_mcp.services import ServiceProvider
 
 COMMIT = "a" * 40
 OTHER = "b" * 40
 INDEX_URL = "https://example.test/index"
-SCHEMA = """
-    CREATE TABLE norms (
-        path TEXT NOT NULL, blob BLOB NOT NULL, sphere TEXT NOT NULL, kind TEXT, year INTEGER,
-        number TEXT, date TEXT, state TEXT, city TEXT, agency TEXT
-    );
-    CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
-    CREATE UNIQUE INDEX ix_path ON norms(path);
-    CREATE INDEX ix_number ON norms(number, year);
-"""
+SCHEMA = IndexBuilder._SCHEMA.replace("PRAGMA journal_mode = OFF;", "").replace("PRAGMA synchronous = OFF;", "")
+SCHEMA += "CREATE UNIQUE INDEX ix_path ON norms(path); CREATE INDEX ix_number ON norms(number, year);"
 _built = iter(range(10**6))
+_PATHS = PathParser()
+
+
+def rows(paths: list[str]) -> list[tuple]:
+    return [(p, hashlib.sha1(p.encode()).digest(), *(getattr(_PATHS.parse(p), c) for c in COLUMNS[2:])) for p in paths]
 
 
 def index_bytes(tmp_path: Path, commit=COMMIT, norms=3, extra: str = "") -> bytes:
     path = tmp_path / f"built-{next(_built)}.sqlite"
     with closing(sqlite3.connect(path)) as db:
         db.executescript(SCHEMA)
-        paths = ["constituicao.md"] + [f"federal/leis/{i}.md" for i in range(norms - 1)]
+        paths = ["constituicao.md"] + [
+            f"federal/leis-ordinarias/2000/lei-{i + 1}-2000-01-01.md" for i in range(norms - 1)
+        ]
         db.executemany(
-            "INSERT INTO norms (path, blob, sphere) VALUES (?, ?, 'federal')",
-            [(p, hashlib.sha1(p.encode()).digest()) for p in paths],
+            f"INSERT INTO norms ({', '.join(COLUMNS)}) VALUES ({', '.join('?' * len(COLUMNS))})", rows(paths)
         )
         db.executemany("INSERT INTO meta VALUES (?, ?)", [("commit", commit), ("total", str(norms))])
         db.commit()
@@ -178,6 +180,15 @@ UNUSABLE = {
     "missing constitution": "UPDATE norms SET path = 'outra.md' WHERE path = 'constituicao.md';",
     "bad stored total": "UPDATE meta SET value = '99' WHERE key = 'total';",
     "missing column": "DROP INDEX ix_number; ALTER TABLE norms DROP COLUMN agency;",
+    "expression index (memory bomb)": "CREATE INDEX ix_e ON norms(length(printf('%.*c', 400000000, 'x')));",
+    "index not built by leis-mcp": "CREATE INDEX ix_extra ON norms(city);",
+    "state norm labelled as Congress": "UPDATE norms SET agency = 'congresso-nacional' WHERE rowid = 2;",
+    "row in the overlay namespace": (
+        "UPDATE norms SET path = 'parlamentar/federal/congresso-nacional/resolucoes/2002/resolucao-1-2002.md'"
+        " WHERE rowid = 2;"
+    ),
+    "path the builder would skip": "UPDATE norms SET path = 'federal/leis-ordinarias/2000/_falhas.md' WHERE rowid = 2;",
+    "wal mode": "PRAGMA journal_mode = WAL;",
 }
 
 
@@ -190,8 +201,15 @@ def test_unusable_index_never_replaces_healthy_one(tmp_path, extra):
     assert_previous_kept(settings, previous)
 
 
+def info_value(value):
+    return "NULL" if value is None else (str(value) if isinstance(value, int) else f"'{value}'")
+
+
 def test_name_with_double_dot_inside_a_segment_is_accepted(tmp_path):
-    extra = "UPDATE norms SET path = 'reguladores/anac/portaria-n-5..868.md' WHERE rowid = 2;"
+    real = "reguladores/anac/portarias/2021/portaria-n-5..868-de-6-de-setembro-de-2021-343832672.md"
+    info = _PATHS.parse(real)
+    sets = ", ".join(f"{c} = {info_value(getattr(info, c))}" for c in COLUMNS[2:])
+    extra = f"UPDATE norms SET path = '{real}', {sets} WHERE rowid = 2;"
     snap, _ = snapshot(tmp_path, published(gzip.compress(index_bytes(tmp_path, extra=extra))))
     assert snap.download().norms == 3
 
@@ -388,7 +406,14 @@ class FakeStream(httpcore.NetworkStream):
     def close(self):
         self.closed = True
 
+    tls_delay = 0.0
+
     def start_tls(self, ssl_context, server_hostname=None, timeout=None):
+        if timeout is not None and self.tls_delay > timeout:
+            self.clock.now += timeout
+            raise httpcore.ConnectTimeout("handshake timed out")
+        self.clock.now += self.tls_delay
+        self.server_hostname = server_hostname
         return self
 
     def get_extra_info(self, info):
@@ -396,14 +421,23 @@ class FakeStream(httpcore.NetworkStream):
 
 
 class FakeNetwork(httpcore.NetworkBackend):
-    def __init__(self, clock: Clock, scripts: list[list[tuple[float, bytes]]]):
+    def __init__(self, clock: Clock, scripts: list[list[tuple[float, bytes]]], connect_delay=0.0, tls_delay=0.0):
         self.clock = clock
         self.scripts = list(scripts)
         self.timeouts: list = []
         self.streams: list[FakeStream] = []
+        self.connect_delay = connect_delay
+        self.tls_delay = tls_delay
+        self.hosts: list[str] = []
 
     def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
+        self.hosts.append(host)
+        if timeout is not None and self.connect_delay > timeout:
+            self.clock.now += timeout
+            raise httpcore.ConnectTimeout("connect timed out")
+        self.clock.now += self.connect_delay
         stream = FakeStream(self.clock, self.scripts.pop(0), self.timeouts)
+        stream.tls_delay = self.tls_delay
         self.streams.append(stream)
         return stream
 
@@ -421,11 +455,19 @@ def no_proxy(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
-def real_stack(tmp_path, scripts, limits: Limits):
+def fake_dns(host, port, type=None):  # noqa: A002
+    return [(2, 1, 6, "", ("192.0.2.10", port))]
+
+
+def real_stack(tmp_path, scripts, limits: Limits, network=None):
     clock = Clock()
-    network = FakeNetwork(clock, scripts)
+    network = network or FakeNetwork(clock, scripts)
+    network.clock = clock
+    for stream in getattr(network, "streams", []):
+        stream.clock = clock
     settings = Settings(home=tmp_path / "home", index_url=INDEX_URL)
-    return IndexSnapshot(settings, limits=limits, clock=clock, network=network), clock, network, settings
+    snap = IndexSnapshot(settings, limits=limits, clock=clock, network=network, resolve=fake_dns)
+    return snap, clock, network, settings
 
 
 def test_slow_headers_are_cut_at_the_stage_deadline(tmp_path, no_proxy):
@@ -557,3 +599,206 @@ def test_provider_reports_failure_and_retries(tmp_path):
     provider._worker.join(5)
     assert provider.get() == "service"
     assert len(attempts) == 2
+
+
+# ---- QA follow-ups: each test fails if its protection is removed -------------------------------------------------
+
+
+def test_slow_connect_and_tls_are_cut_at_the_stage_deadline(tmp_path, no_proxy):
+    for delays in ({"connect_delay": 500}, {"tls_delay": 500}):
+        clock = Clock()
+        network = FakeNetwork(clock, [[(0, response_bytes(b"{}"))]], **delays)
+        limits = Limits(manifest_seconds=120, connect_seconds=10_000)
+        snap, clock, _, _ = real_stack(tmp_path, [], limits, network=network)
+        with pytest.raises(SnapshotResourceError, match="120 s"):
+            snap.latest()
+        assert clock.now <= 120
+
+
+def test_tls_verifies_the_hostname_while_connecting_to_the_resolved_address(tmp_path, no_proxy):
+    clock = Clock()
+    manifest = json.dumps({"commit": COMMIT, "archive": "a.gz", "sha256": "0" * 64}).encode()
+    network = FakeNetwork(clock, [[(0, response_bytes(manifest))]])
+    snap, *_ = real_stack(tmp_path, [], Limits(), network=network)
+    snap.latest()
+    assert network.hosts == ["192.0.2.10"]
+    assert network.streams[0].server_hostname == "example.test"
+
+
+def test_dns_lookup_is_bounded_by_the_stage_deadline(tmp_path, no_proxy):
+    release = threading.Event()
+
+    def hanging_dns(host, port, type=None):  # noqa: A002
+        release.wait(30)
+        return fake_dns(host, port)
+
+    settings = Settings(home=tmp_path, index_url=INDEX_URL)
+    snap = IndexSnapshot(settings, limits=Limits(manifest_seconds=0.5), resolve=hanging_dns)
+    started = time.monotonic()
+    try:
+        with pytest.raises(SnapshotResourceError):
+            snap.latest()
+        assert time.monotonic() - started < 3
+    finally:
+        release.set()
+
+
+def test_slow_headers_through_the_proxy_route_are_cut(tmp_path, monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.test:3128")
+    for name in ("NO_PROXY", "no_proxy", "https_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    head = response_bytes(b"{}")
+    connect = b"HTTP/1.1 200 Connection established\r\n\r\n"
+    script = [(0, connect), (0, head[:10])] + [(50, head[10 + i : 11 + i]) for i in range(20)]
+    snap, clock, network, _ = real_stack(tmp_path, [script], Limits(manifest_seconds=120, read_seconds=60))
+    with pytest.raises(SnapshotResourceError, match="120 s"):
+        snap.latest()
+    assert clock.now <= 120
+    assert network.hosts == ["192.0.2.10"]  # the proxy connection went through the deadline backend
+
+
+class ChunkedStream(httpx.SyncByteStream):
+    def __init__(self, size: int, piece: int):
+        self.size, self.piece, self.sent = size, piece, 0
+
+    def __iter__(self):
+        while self.sent < self.size:
+            self.sent += self.piece
+            yield b" " * self.piece
+
+
+def test_byte_cap_is_checked_per_network_read(tmp_path):
+    stream = ChunkedStream(4 << 20, 4096)
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, stream=stream))
+    snap = IndexSnapshot(Settings(home=tmp_path, index_url=INDEX_URL), httpx.Client(transport=transport))
+    with pytest.raises(SnapshotResourceError, match="limite"):
+        snap.latest()
+    assert stream.sent <= Limits().manifest_bytes + 4096
+
+
+def test_forged_unique_flag_is_caught_by_integrity_check(tmp_path):
+    extra = (
+        "DROP INDEX ix_path; UPDATE norms SET path = 'constituicao.md';"
+        " CREATE INDEX ix_path ON norms(path); PRAGMA writable_schema = ON;"
+        " UPDATE sqlite_master SET sql = 'CREATE UNIQUE INDEX ix_path ON norms(path)' WHERE name = 'ix_path';"
+    )
+    snap, settings = snapshot(tmp_path, published(gzip.compress(index_bytes(tmp_path, extra=extra))))
+    previous = install_previous(settings, tmp_path)
+    with pytest.raises(SnapshotError, match="integrity_check"):
+        snap.download()
+    assert_previous_kept(settings, previous)
+
+
+def staged(tmp_path, limits):
+    clock = Clock()
+    files = published(gzip.compress(index_bytes(tmp_path, norms=50)))
+
+    def handler(request):
+        body = files.get(request.url.path)
+        return httpx.Response(200, content=body) if body is not None else httpx.Response(404)
+
+    settings = Settings(home=tmp_path / "home", index_url=INDEX_URL)
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    return IndexSnapshot(settings, client, limits=limits, clock=clock), clock, settings
+
+
+def test_extraction_is_cut_at_the_prepare_deadline(tmp_path, monkeypatch):
+    snap, clock, settings = staged(tmp_path, Limits(prepare_seconds=10))
+    validated, reads = [], []
+    original_read = gzip.GzipFile.read
+
+    def slow_read(self, size=-1):
+        reads.append(size)
+        clock.now += 20
+        return original_read(self, size)
+
+    monkeypatch.setattr(gzip.GzipFile, "read", slow_read)
+    monkeypatch.setattr(snap, "_CHUNK", 1024)  # many reads: the cut must come at the first late one
+    monkeypatch.setattr(snap, "_validate", lambda *a, **k: validated.append(1))
+    with pytest.raises(SnapshotResourceError, match="extração"):
+        snap.download()
+    assert len(reads) == 1
+    assert validated == []
+    assert home_files(settings) == []
+
+
+def test_validation_is_cut_at_the_prepare_deadline(tmp_path, monkeypatch):
+    snap, clock, settings = staged(tmp_path, Limits(prepare_seconds=10))
+    extract = snap._extract
+
+    def then_late(*args):
+        extract(*args)
+        clock.now += 60  # validation starts after the deadline: the SQLite progress handler must stop it
+
+    monkeypatch.setattr(snap, "_extract", then_late)
+    monkeypatch.setattr(snap, "_PROGRESS_OPS", 1)
+    with pytest.raises(SnapshotResourceError, match="validação"):
+        snap.download()
+    assert home_files(settings) == []
+
+
+def test_provider_repairs_an_unreadable_index_in_the_background(tmp_path):
+    settings = Settings(home=tmp_path)
+    settings.db_path.write_bytes(b"not sqlite")
+    repaired = threading.Event()
+    calls = []
+
+    def factory():
+        calls.append(1)
+        if not repaired.is_set():
+            raise sqlite3.DatabaseError("file is not a database")
+        return "service"
+
+    def prepare():
+        settings.db_path.write_bytes(b"repaired")
+        repaired.set()
+
+    provider = ServiceProvider(settings, factory=factory, prepare=prepare)
+    with pytest.raises(IndexPreparingError, match="Preparando"):
+        provider.get()
+    provider._worker.join(5)
+    assert provider.get() == "service"
+
+
+def test_debug_logs_of_httpcore_omit_signed_location(tmp_path, caplog, no_proxy):
+    redirect = b"HTTP/1.1 302 Found\r\nLocation: https://cdn.test/a?sig=SECRET&jwt=TOKEN\r\nContent-Length: 0\r\n\r\n"
+    clock = Clock()
+    network = FakeNetwork(clock, [[(0, redirect)], [(0, response_bytes(b"{}"))]])
+    snap, *_ = real_stack(tmp_path, [], Limits(), network=network)
+    with caplog.at_level("DEBUG"), pytest.raises(SnapshotError):
+        snap.latest()
+    assert "Location" in caplog.text or "location" in caplog.text
+    assert "SECRET" not in caplog.text and "TOKEN" not in caplog.text
+
+
+def test_provider_does_not_hand_git_details_to_clients(tmp_path):
+    settings = Settings(home=tmp_path)
+
+    def prepare():
+        raise GitError("clone", "fatal: could not read from /data/repo.partial: token=abc")
+
+    provider = ServiceProvider(settings, factory=lambda: "service", prepare=prepare)
+    provider.start()
+    provider._worker.join(5)
+    with pytest.raises(IndexPreparingError) as raised:
+        provider.get()
+    assert "token" not in str(raised.value) and "/data" not in str(raised.value)
+    assert "log do servidor" in str(raised.value)
+
+
+def test_clone_log_drops_credentials():
+    from leis_mcp.catalog.git_repository import _without_credentials
+
+    assert _without_credentials("https://user:tok@github.com/o/r") == "https://github.com/o/r"
+    assert _without_credentials("https://github.com/ctresb/leis") == "https://github.com/ctresb/leis"
+
+
+@pytest.mark.parametrize("address", ["fec0::1", "ff02::1", "224.0.0.1"])
+def test_collector_refuses_site_local_and_multicast(address):
+    from leis_mcp.overlay.allowlist import FetchRejected, validate_url
+
+    def resolve(host, port, type=None):  # noqa: A002
+        return [(10, 1, 6, "", (address, port))]
+
+    with pytest.raises(FetchRejected):
+        validate_url("https://www2.camara.leg.br/x", resolve=resolve)

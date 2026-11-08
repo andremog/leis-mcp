@@ -5,13 +5,14 @@ and clients such as Claude Desktop give up on servers that take minutes to start
 """
 
 import logging
+import sqlite3
 import threading
 import time
 from collections.abc import Callable
 
 from .. import messages
 from ..config import Settings
-from ..errors import IndexPreparingError
+from ..errors import IndexMissingError, IndexPreparingError, SnapshotError
 from .legislation import LegislationService
 
 log = logging.getLogger(__name__)
@@ -43,17 +44,30 @@ class ServiceProvider:
             return self._service
 
     def _create(self) -> LegislationService:
+        repair = False
         if self._settings.db_path.exists():  # the index is swapped in atomically, so it is complete when present
-            return self._factory()
+            try:
+                return self._factory()
+            except (sqlite3.DatabaseError, IndexMissingError) as exc:  # damaged on disk: prepare a new one
+                log.warning("Local index unreadable (%s); preparing a new one in the background", type(exc).__name__)
+                repair = True
+        if self._worker is not None and self._worker.is_alive():
+            raise IndexPreparingError(messages.INDEX_PREPARING)
         error = self._error
         if error is not None and time.monotonic() - self._failed_at < self.RETRY_AFTER:
-            raise IndexPreparingError(messages.INDEX_FAILED.format(error=error)) from error
+            raise IndexPreparingError(messages.INDEX_FAILED.format(error=self._public(error))) from error
         self._error = None
-        self._start_worker()  # first attempt, or a retry once RETRY_AFTER has passed
+        self._start_worker(repair)  # first attempt, or a retry once RETRY_AFTER has passed
         raise IndexPreparingError(messages.INDEX_PREPARING)
 
-    def _start_worker(self) -> None:
-        if self._settings.db_path.exists() or (self._worker is not None and self._worker.is_alive()):
+    @staticmethod
+    def _public(error: Exception) -> str:
+        """Snapshot messages are written for users; other failures (git stderr, paths) stay in the server log."""
+        return str(error) if isinstance(error, SnapshotError) else messages.INDEX_FAILED_DETAILS_IN_LOG
+
+    def _start_worker(self, repair: bool = False) -> None:
+        busy = self._worker is not None and self._worker.is_alive()
+        if busy or (self._settings.db_path.exists() and not repair):
             return
         self._worker = threading.Thread(target=self._run, name="index-prepare", daemon=True)
         self._worker.start()

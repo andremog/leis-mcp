@@ -97,24 +97,29 @@ Orçamentos (`catalog/snapshot.py`, `Limits`):
 | Arquivo `.gz` | 900 s | 512 MiB |
 | Extração + validação | 600 s | 2 GiB extraído |
 
-O prazo de cada etapa é aplicado em toda chamada de socket (conexão, TLS, envio, cabeçalhos e corpo), por um backend do httpcore que reduz o timeout de cada leitura ao que resta do prazo. A inatividade por leitura é de no máximo 60 s, nunca acima do que resta. O SQLite é validado com um progress handler preso ao mesmo prazo. Abaixo de 64 MiB livres, o download para.
+O prazo de cada etapa é aplicado em toda chamada de socket (DNS, conexão, TLS, envio, cabeçalhos e corpo; o DNS roda numa thread com o tempo restante e a conexão vai ao IP resolvido, com o certificado ainda verificado pelo nome do host), por um backend do httpcore que reduz o timeout de cada leitura ao que resta do prazo. A inatividade por leitura é de no máximo 60 s, nunca acima do que resta. Os tetos de bytes são conferidos a cada leitura de rede (até 64 KiB além do teto). O SQLite é validado com um progress handler preso ao mesmo prazo. Abaixo de 64 MiB livres, o download para.
 
 Estouro de prazo, de tamanho ou de disco é `SnapshotResourceError` e não aciona o build via git. Manifesto ausente, 404 ou arquivo corrompido ainda caem no git quando ele está instalado. Um 404 no arquivo relê o manifesto uma vez.
 
 Antes de substituir o índice, o arquivo extraído precisa passar por:
 
-- `integrity_check`;
-- só as tabelas `norms`, `meta` e `sqlite_stat*`, sem view, trigger nem tabela virtual;
-- todas as colunas usadas;
-- um índice UNIQUE completo só em `path`, lido em `pragma_index_list`/`pragma_index_info`;
+- não estar em modo WAL;
+- esquema exato do que `IndexBuilder` gera: tabelas `norms`, `meta` e `sqlite_stat*` com o SQL do builder, e só os índices do builder (sem view, trigger, tabela virtual, índice de expressão ou coluna gerada). Essa checagem vem antes de qualquer outra, então nada escolhido pelo publicador é avaliado;
+- valores limitados a 1 MiB (`SQLITE_LIMIT_LENGTH`). `MemoryError` vira recusa de orçamento;
+- um índice UNIQUE completo só em `path`, lido em `pragma_index_list`/`pragma_index_info`, e `integrity_check`, que também pega um UNIQUE forjado com `writable_schema`;
 - `meta.total` igual à contagem, e esta igual a `norms` do manifesto;
 - `meta.commit` igual ao commit do manifesto;
-- nenhuma linha com caminho vazio, absoluto ou com segmento `..`, nem com blob que não tenha 20 bytes;
+- nenhuma linha com caminho vazio, absoluto, com segmento `..` ou no espaço `parlamentar/` (reservado ao overlay), nem com blob que não tenha 20 bytes;
+- em cada linha, os metadados (esfera, tipo, ano, número, data, UF, município, órgão) iguais ao que o `PathParser` deriva do caminho, como num build local. Um snapshot não consegue rotular uma norma do DF como do Congresso Nacional;
 - `constituicao.md` presente;
 - não ter menos da metade das normas do índice instalado.
 
+No índice real de 1.218.990 normas, a validação completa leva cerca de 13 s e o `leis-mcp index` inteiro fica com pico de cerca de 40 MB de RSS.
+
+Um índice local ilegível (por exemplo, corrompido no disco) não derruba as ferramentas: o servidor responde "Preparando o índice" e baixa um novo em segundo plano. Falha da montagem via git aparece ao cliente MCP só como "detalhes no log do servidor"; a saída do git fica no log.
+
 Se qualquer item falha, o índice e o overlay ficam byte a byte como estavam e os temporários são apagados. A troca é `os.replace` depois de `fsync`, sob um lock de arquivo (`index.sqlite.lock`) que serializa downloads concorrentes.
 
-URL assinada de redirecionamento, usuário/senha e query string não entram em mensagem de erro nem no log do `httpx`.
+URL assinada de redirecionamento, usuário/senha e query string não entram em mensagem de erro nem nos logs do `httpx` e do `httpcore` (inclusive o `Location` em DEBUG). O log do clone também omite usuário e senha da URL do repositório.
 
 No Fly, o volume já tem o clone e o índice montado por git. O primeiro `update` depois do deploy compara o commit e só baixa se mudou. O processo no ar continua com o índice antigo aberto até reiniciar, como antes.

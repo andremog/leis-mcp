@@ -75,7 +75,8 @@ def _split_public(url: str, *, resolve) -> tuple[str, str]:
     chosen: str | None = None
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if not ip.is_global:
+        site_local = isinstance(ip, ipaddress.IPv6Address) and ip.is_site_local
+        if not ip.is_global or ip.is_multicast or site_local:
             raise FetchRejected(f"Endereço não público para {host}: recusado.")
         chosen = chosen or str(ip)
     if chosen is None:

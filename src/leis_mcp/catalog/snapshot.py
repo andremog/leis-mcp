@@ -3,7 +3,7 @@
 The release holds `index.json` (commit, built_at, norms, archive, sha256) and the gzip archive it names.
 
 Every stage has a budget. The manifest and the archive each have an aggregate deadline that bounds every
-socket operation (connect, TLS, request, response headers and body), a byte cap and a free-space reserve;
+socket operation (DNS, connect, TLS, request, response headers and body), a byte cap and a free-space reserve;
 extraction and validation share another deadline and a cap on the expanded database. A budget refusal is
 `SnapshotResourceError`, which callers must not answer with a git build. The extracted database is checked
 for schema, structural uniqueness of `path`, counts and commit before it atomically replaces the local
@@ -12,10 +12,13 @@ index. The parliamentary overlay (`<home>/overlay`) is never touched.
 
 import gzip
 import hashlib
+import ipaddress
 import json
 import logging
 import os
+import re
 import shutil
+import socket
 import sqlite3
 import threading
 import time
@@ -35,7 +38,8 @@ from .. import messages
 from ..config import CONSTITUTION_PATH, Settings
 from ..errors import SnapshotError, SnapshotResourceError
 from ..models import IndexStats
-from .index import COLUMNS
+from .index import COLUMNS, IndexBuilder
+from .path_parser import PathParser
 
 try:  # POSIX; elsewhere concurrent first runs are still kept apart by per-process file names
     import fcntl
@@ -48,25 +52,53 @@ Clock = Callable[[], float]
 _HEX = frozenset("0123456789abcdef")
 
 
+_QUERY = re.compile(r"(https?://[^\s'\"?#]+)[?#][^\s'\"]*")
+_USERINFO = re.compile(r"(https?://)[^/\s'\"@]+@")
+
+
+def _scrub(text: str) -> str:
+    """Drops query strings, fragments and user info from every URL in `text`."""
+    return _USERINFO.sub(r"\1", _QUERY.sub(r"\1", text))
+
+
 class _RedactQuery(logging.Filter):
-    """httpx logs each request URL at INFO; signed release-asset URLs carry tokens in the query string."""
+    """httpx logs request URLs at INFO and httpcore logs response headers (Location) at DEBUG; signed
+    release-asset URLs carry tokens in the query string."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.args, tuple) and record.args:
-            record.args = tuple(_redact(arg) for arg in record.args)
+        message = record.getMessage()
+        scrubbed = _scrub(message)
+        if scrubbed != message:
+            record.msg, record.args = scrubbed, None
         return True
 
 
-def _redact(value: Any) -> Any:
-    if isinstance(value, httpx.URL):
-        value = str(value)
-    if isinstance(value, str) and value.startswith(("http://", "https://")):
-        return IndexSnapshot._safe(value)
-    return value
+# Logger filters do not apply to child loggers, so each httpcore module logger gets its own.
+for _name in (
+    "httpx",
+    "httpcore",
+    "httpcore.connection",
+    "httpcore.http11",
+    "httpcore.http2",
+    "httpcore.proxy",
+    "httpcore.socks",
+):
+    _logger = logging.getLogger(_name)
+    if not any(isinstance(item, _RedactQuery) for item in _logger.filters):
+        _logger.addFilter(_RedactQuery())
 
 
-if not any(isinstance(item, _RedactQuery) for item in logging.getLogger("httpx").filters):
-    logging.getLogger("httpx").addFilter(_RedactQuery())
+def _statements(script: str) -> set[str]:
+    return {_normal(part) for part in script.split(";") if part.strip().upper().startswith("CREATE")}
+
+
+def _normal(sql: str) -> str:
+    text = re.sub(r"\s+", " ", sql.strip().rstrip(";"))
+    return re.sub(r"\s*([(),])\s*", r"\1", text).upper()
+
+
+_SCHEMA = _statements(IndexBuilder._SCHEMA)
+_INDEXES = _statements(IndexBuilder._INDEXES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,9 +147,15 @@ class _DeadlineBackend(httpcore.NetworkBackend):
     inactivity timeout again and a slow sender can stretch a stage far beyond its deadline.
     """
 
-    def __init__(self, inner: httpcore.NetworkBackend, current: Callable[[], _Deadline | None]):
+    def __init__(
+        self,
+        inner: httpcore.NetworkBackend,
+        current: Callable[[], _Deadline | None],
+        resolve: Callable[..., list] = socket.getaddrinfo,
+    ):
         self._inner = inner
         self._current = current
+        self._resolve = resolve
 
     def clamp(self, timeout: float | None, error: type[Exception]) -> float | None:
         deadline = self._current()
@@ -129,14 +167,50 @@ class _DeadlineBackend(httpcore.NetworkBackend):
         return left if timeout is None else min(timeout, left)
 
     def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
-        stream = self._inner.connect_tcp(
-            host,
-            port,
-            timeout=self.clamp(timeout, httpcore.ConnectTimeout),
-            local_address=local_address,
-            socket_options=socket_options,
-        )
-        return _DeadlineStream(stream, self)
+        last: Exception | None = None
+        for address in self._addresses(host, port):  # TLS still verifies `host`: httpcore passes it as SNI
+            try:
+                stream = self._inner.connect_tcp(
+                    address,
+                    port,
+                    timeout=self.clamp(timeout, httpcore.ConnectTimeout),
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
+            except httpcore.ConnectError as exc:
+                last = exc
+                continue
+            return _DeadlineStream(stream, self)
+        raise last or httpcore.ConnectError(f"no address for {host}")
+
+    def _addresses(self, host: str, port: int) -> list[str]:
+        """Resolves `host` within the stage deadline; `getaddrinfo` itself has no timeout."""
+        try:
+            ipaddress.ip_address(host)
+            return [host]
+        except ValueError:
+            pass
+        limit = self.clamp(None, httpcore.ConnectTimeout)
+        outcome: dict[str, Any] = {}
+
+        def run() -> None:
+            try:
+                outcome["infos"] = self._resolve(host, port, type=socket.SOCK_STREAM)
+            except BaseException as exc:  # noqa: BLE001 - surfaced to the caller thread
+                outcome["error"] = exc
+
+        worker = threading.Thread(target=run, name="index-dns", daemon=True)
+        worker.start()
+        worker.join(limit)
+        if worker.is_alive():
+            deadline = self._current()
+            raise httpcore.ConnectTimeout(deadline.message() if deadline else f"DNS timeout for {host}")
+        if "error" in outcome:
+            raise httpcore.ConnectError(f"DNS failure for {host}") from outcome["error"]
+        addresses = list(dict.fromkeys(info[4][0] for info in outcome.get("infos") or []))
+        if not addresses:
+            raise httpcore.ConnectError(f"no address for {host}")
+        return addresses
 
     def connect_unix_socket(self, path, timeout=None, socket_options=None):
         raise httpcore.ConnectError("unix sockets are not used for the prebuilt index")
@@ -202,6 +276,13 @@ class IndexSnapshot:
     _SPACE_CHECK = 32 << 20  # bytes written between free-space checks
     _PROGRESS_OPS = 20_000  # SQLite VM steps between deadline checks
     _ALLOWED_TABLES = frozenset({"norms", "meta", "sqlite_stat1", "sqlite_stat4"})
+    _STAT_TABLES = frozenset(
+        {
+            _normal("CREATE TABLE sqlite_stat1(tbl,idx,stat)"),
+            _normal("CREATE TABLE sqlite_stat4(tbl,idx,neq,nlt,ndlt,sample)"),
+        }
+    )
+    _MAX_VALUE = 1 << 20  # bytes; the longest legitimate value is a path or a commit
 
     def __init__(
         self,
@@ -211,8 +292,10 @@ class IndexSnapshot:
         limits: Limits | None = None,
         clock: Clock = time.monotonic,
         network: httpcore.NetworkBackend | None = None,
+        resolve: Callable[..., list] = socket.getaddrinfo,
     ):
         self._settings = settings
+        self._resolve = resolve
         self._limits = limits or Limits()
         self._clock = clock
         self._local = threading.local()
@@ -341,42 +424,58 @@ class IndexSnapshot:
     def _validate(self, path: Path, deadline: _Deadline | None, *, thorough: bool) -> _Checked:
         """Raises `SnapshotError` unless `path` is an index the service can answer from."""
         try:
+            with path.open("rb") as handle:
+                header = handle.read(100)
+        except OSError as exc:
+            raise SnapshotError(messages.SNAPSHOT_UNUSABLE.format(details=type(exc).__name__)) from exc
+        if len(header) == 100 and header.startswith(b"SQLite format 3\x00") and 2 in (header[18], header[19]):
+            raise SnapshotError(messages.SNAPSHOT_UNUSABLE.format(details="modo WAL"))
+        try:
             with closing(sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)) as db:
+                db.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, self._MAX_VALUE)  # no huge values, even from expressions
                 if deadline is not None:
                     db.set_progress_handler(lambda: 1 if deadline.expired() else 0, self._PROGRESS_OPS)
                 try:
-                    return self._inspect(db, thorough)
+                    return self._inspect(db, thorough, deadline)
                 except sqlite3.OperationalError as exc:
                     if deadline is not None and deadline.expired():
                         raise SnapshotResourceError(deadline.message()) from exc
                     raise
-        except sqlite3.Error as exc:
+        except MemoryError as exc:
+            raise SnapshotResourceError(messages.SNAPSHOT_UNUSABLE.format(details="memória")) from exc
+        except (sqlite3.Error, ValueError, RecursionError) as exc:
             raise SnapshotError(messages.SNAPSHOT_UNUSABLE.format(details=type(exc).__name__)) from exc
 
-    def _inspect(self, db: sqlite3.Connection, thorough: bool) -> _Checked:
+    def _inspect(self, db: sqlite3.Connection, thorough: bool, deadline: _Deadline | None) -> _Checked:
         def unusable(details: str) -> SnapshotError:
             return SnapshotError(messages.SNAPSHOT_UNUSABLE.format(details=details))
+
+        # Exact schema first, so nothing chosen by the publisher (expression indexes, generated columns,
+        # collations, views, triggers) is evaluated by the checks below.
+        objects = db.execute("SELECT type, name, tbl_name, sql FROM sqlite_master").fetchall()
+        tables = {name: sql for kind, name, _, sql in objects if kind == "table"}
+        if any(kind not in ("table", "index") for kind, _, _, _ in objects):
+            raise unusable("view/trigger")
+        if set(tables) - self._ALLOWED_TABLES or not {"norms", "meta"} <= set(tables):
+            raise unusable(f"tabelas {sorted(tables)}")
+        if {_normal(tables["norms"] or ""), _normal(tables["meta"] or "")} != _SCHEMA:
+            raise unusable("esquema de norms/meta")
+        for name in self._ALLOWED_TABLES & set(tables) - {"norms", "meta"}:
+            if _normal(tables[name] or "") not in self._STAT_TABLES:
+                raise unusable(f"esquema de {name}")
+        indexes = {name: (table, sql) for kind, name, table, sql in objects if kind == "index"}
+        for name, (table, sql) in indexes.items():
+            if sql is None:  # automatic index of meta's PRIMARY KEY
+                if table != "meta" or not name.startswith("sqlite_autoindex_meta_"):
+                    raise unusable(f"índice {name}")
+            elif _normal(sql) not in _INDEXES:
+                raise unusable(f"índice {name}")
+        if not self._unique_path_index(db):
+            raise unusable("sem índice único em path")
 
         check = db.execute("PRAGMA integrity_check(1)" if thorough else "PRAGMA quick_check(1)").fetchone()
         if not check or check[0] != "ok":
             raise unusable("integrity_check")
-        objects = db.execute("SELECT type, name, tbl_name, coalesce(sql, '') FROM sqlite_master").fetchall()
-        tables = {name for kind, name, _, _ in objects if kind == "table"}
-        if any(kind in ("view", "trigger") for kind, _, _, _ in objects):
-            raise unusable("view/trigger")
-        if not {"norms", "meta"} <= tables or tables - self._ALLOWED_TABLES:
-            raise unusable(f"tabelas {sorted(tables)}")
-        if any(kind == "table" and sql.lstrip().upper().startswith("CREATE VIRTUAL") for kind, _, _, sql in objects):
-            raise unusable("virtual table")
-        if any(kind == "index" and table not in ("norms", "meta") for kind, _, table, _ in objects):
-            raise unusable("índice fora de norms/meta")
-        columns = {row[1] for row in db.execute("PRAGMA table_info(norms)")}
-        if not set(COLUMNS) <= columns:
-            raise unusable(f"colunas ausentes {sorted(set(COLUMNS) - columns)}")
-        if not {"key", "value"} <= {row[1] for row in db.execute("PRAGMA table_info(meta)")}:
-            raise unusable("meta")
-        if not self._unique_path_index(db):
-            raise unusable("sem índice único em path")
         meta = dict(db.execute("SELECT key, value FROM meta").fetchall())
         commit = meta.get("commit")
         if not isinstance(commit, str) or len(commit) != 40 or not set(commit) <= _HEX:
@@ -385,15 +484,34 @@ class IndexSnapshot:
         if norms <= 0 or str(meta.get("total")) != str(norms):
             raise unusable(f"total {meta.get('total')} != {norms}")
         bad = db.execute(
-            "SELECT count(*) FROM norms WHERE path IS NULL OR path = '' OR path LIKE '/%' "
+            "SELECT count(*) FROM norms WHERE path = '' OR path LIKE '/%' OR path LIKE 'parlamentar/%' "
             "OR '/' || path || '/' LIKE '%/../%' OR '/' || path || '/' LIKE '%/./%' "
-            "OR typeof(blob) != 'blob' OR length(blob) != 20 OR sphere IS NULL OR sphere = ''"
+            "OR typeof(blob) != 'blob' OR length(blob) != 20"
         ).fetchone()[0]
         if bad:
             raise unusable(f"{bad} linhas inválidas")
         if db.execute("SELECT 1 FROM norms WHERE path = ?", [CONSTITUTION_PATH]).fetchone() is None:
             raise unusable(CONSTITUTION_PATH)
+        if thorough:
+            self._check_rows(db, deadline, unusable)
         return _Checked(commit, norms)
+
+    def _check_rows(self, db: sqlite3.Connection, deadline: _Deadline | None, unusable) -> None:
+        """Every row's metadata must be what `PathParser` derives from its path, as in a local build.
+
+        Otherwise a snapshot could label a state norm as `congresso-nacional` and answer for it.
+        """
+        paths = PathParser()
+        columns = COLUMNS[2:]
+        cursor = db.execute(f"SELECT path, {', '.join(columns)} FROM norms")
+        for count, (path, *values) in enumerate(cursor, 1):
+            if count % 20_000 == 0 and deadline is not None:
+                deadline.remaining()
+            if not paths.is_indexable(path):
+                raise unusable(f"caminho não indexável {path[:80]!r}")
+            info = paths.parse(path)
+            if tuple(values) != tuple(getattr(info, column) for column in columns):
+                raise unusable(f"metadados não derivam do caminho {path[:80]!r}")
 
     @staticmethod
     def _unique_path_index(db: sqlite3.Connection) -> bool:
@@ -467,7 +585,7 @@ class IndexSnapshot:
                     if space is not None:
                         self._require_space(space, int(declared))
                 total = 0
-                for chunk in response.iter_bytes(self._CHUNK):  # content-encoding already refused: raw bytes
+                for chunk in response.iter_bytes():  # as read from the socket, so caps hold per read; identity only
                     deadline.remaining()
                     total += len(chunk)
                     if total > limit:
@@ -510,7 +628,7 @@ class IndexSnapshot:
             raise SnapshotError(
                 messages.SNAPSHOT_FAILED.format(url=self._safe(self._settings.index_url), details="transport")
             )
-        pool._network_backend = _DeadlineBackend(inner, lambda: getattr(self._local, "deadline", None))
+        pool._network_backend = _DeadlineBackend(inner, lambda: getattr(self._local, "deadline", None), self._resolve)
         return transport
 
     # ---- helpers ------------------------------------------------------------------------------------------
@@ -553,7 +671,8 @@ class IndexSnapshot:
     @staticmethod
     def _purge_partials(db_path: Path) -> None:
         """Under the exclusive lock, leftovers of interrupted downloads belong to no one."""
-        for pattern in (f"{db_path.name}.*.gz.partial", f"{db_path.name}.*.tmp"):
+        name = db_path.name
+        for pattern in (f"{name}.*.gz.partial", f"{name}.*.tmp", f"{name}.*.tmp-shm", f"{name}.*.tmp-wal"):
             for leftover in db_path.parent.glob(pattern):
                 leftover.unlink(missing_ok=True)
 

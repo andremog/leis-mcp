@@ -39,6 +39,7 @@ INDEX_PREPARING = (
     "Preparando o índice das normas (primeira execução, leva de 1 a 3 minutos). Tente de novo em instantes."
 )
 INDEX_FAILED = "Não consegui preparar o índice: {error} Tento de novo daqui a pouco."
+INDEX_FAILED_DETAILS_IN_LOG = "a montagem local falhou (detalhes no log do servidor)."
 SNAPSHOT_FAILED = "Falha ao baixar o índice pronto de {url}: {details}"
 SNAPSHOT_CORRUPTED = "O índice baixado está corrompido ({details}). Tente de novo mais tarde."
 SNAPSHOT_WRITE_FAILED = "Não consegui gravar o índice em {path}: {details}"
