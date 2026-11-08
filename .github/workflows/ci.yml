@@ -52,3 +52,21 @@ jobs:
 
       - name: Check package metadata
         run: uvx twine check --strict dist/*
+
+  mcpb:
+    name: Claude Desktop extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Validate and pack
+        run: mcpb/pack.sh
+
+      - name: Check the server.json schema
+        run: uvx check-jsonschema --schemafile "$(jq -r '.["$schema"]' server.json)" server.json

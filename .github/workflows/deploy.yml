@@ -1,0 +1,82 @@
+name: Deploy
+
+# Manual deploy of `main` to Fly.io (app in fly.toml). Needs the repository secret FLY_API_TOKEN, a deploy
+# token scoped to the app: `fly tokens create deploy -a leis-mcp-andremog`.
+# Steps follow docs/parlamentar/plano-e-status.md: the API key must already be a Fly secret, the volume and
+# auth are not changed, the image in production before the deploy is recorded, the public surface is smoke
+# tested, and a failed smoke test rolls back to the previous image.
+
+on:
+  workflow_dispatch:
+    inputs:
+      rollback_image:
+        description: "Image to restore if the smoke test fails (empty: the image running before this deploy)"
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  APP: leis-mcp-andremog
+  URL: https://leis-mcp-andremog.fly.dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Preflight
+        id: preflight
+        env:
+          ROLLBACK_INPUT: ${{ inputs.rollback_image }}
+        run: |
+          test -n "$FLY_API_TOKEN" || { echo "::error::FLY_API_TOKEN is not set"; exit 1; }
+          # Without the key the HTTP endpoint would be open to anyone.
+          flyctl secrets list -a "$APP" | grep -q LEIS_MCP_API_KEY || { echo "::error::LEIS_MCP_API_KEY missing"; exit 1; }
+          current=$(flyctl status -a "$APP" --json | jq -r '.Machines[0].config.image // empty')
+          echo "Image before deploy: ${current:-unknown}"
+          # Rollback target: the input, else the running image, else the last release recorded in the plan.
+          previous="${ROLLBACK_INPUT:-${current:-registry.fly.io/$APP:rev-486b4e0}}"
+          echo "Rollback target: $previous"
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          flyctl volumes list -a "$APP"
+
+      - name: Deploy
+        run: flyctl deploy --remote-only -a "$APP" --image-label "rev-${GITHUB_SHA::7}"
+
+      - name: Smoke test
+        id: smoke
+        run: |
+          body='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"deploy-smoke","version":"0"}}}'
+          code=""
+          for _ in $(seq 1 30); do  # the Machine may be starting (auto_stop) or preparing
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/health") && [ "$code" = 200 ] && break
+            sleep 10
+          done
+          echo "/health -> $code"; test "$code" = 200
+          anon=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$URL/mcp" -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' -d "$body")
+          wrong=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$URL/mcp" -H 'Authorization: Bearer wrong' \
+            -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d "$body")
+          echo "/mcp without key -> $anon, wrong key -> $wrong"
+          test "$anon" = 401 && test "$wrong" = 401
+
+      - name: Roll back
+        if: failure() && steps.smoke.outcome == 'failure' && steps.preflight.outputs.previous != ''
+        env:
+          PREVIOUS: ${{ steps.preflight.outputs.previous }}
+        run: |
+          echo "Smoke test failed: restoring $PREVIOUS"
+          flyctl deploy -a "$APP" --image "$PREVIOUS"

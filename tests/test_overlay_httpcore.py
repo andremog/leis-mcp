@@ -142,6 +142,7 @@ def test_redirect_and_blocked_connect_use_the_remaining_deadline():
     assert time.monotonic() - started < 0.5
 
 
+@pytest.mark.integration  # live HTTPS to www2.camara.leg.br
 def test_bounded_official_resolution_page():
     fetched = Collector(max_bytes=400_000, total_timeout=40).fetch(OFFICIAL)
     assert len(fetched.data) < 400_000

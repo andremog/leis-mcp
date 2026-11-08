@@ -35,6 +35,28 @@ AMBIGUOUS_REFERENCE = "Referência ambígua {reference!r}: informe o ano (ex.: '
 NO_MATCHING_NORMS = "Nenhuma norma encontrada com esses filtros."
 INVALID_SPHERE = "Esfera inválida: {sphere!r}. Use uma de: {options}."
 INDEX_MISSING = "Índice não encontrado em {path}. Rode `leis-mcp index` primeiro."
+INDEX_PREPARING = (
+    "Preparando o índice das normas (primeira execução, leva de 1 a 3 minutos). Tente de novo em instantes."
+)
+INDEX_REPAIR_FAILED = "o índice baixado para o reparo continua ilegível (rode `leis-mcp update`)."
+INDEX_REPAIRING = "O índice local está ilegível; estou baixando um novo. Tente de novo em instantes."
+INDEX_FAILED = "Não consegui preparar o índice: {error} Tento de novo daqui a pouco."
+INDEX_FAILED_DETAILS_IN_LOG = "a montagem local falhou (detalhes no log do servidor)."
+SNAPSHOT_FAILED = "Falha ao baixar o índice pronto de {url}: {details}"
+SNAPSHOT_CORRUPTED = "O índice baixado está corrompido ({details}). Tente de novo mais tarde."
+SNAPSHOT_WRITE_FAILED = "Não consegui gravar o índice em {path}: {details}"
+SNAPSHOT_TIMEOUT = "O índice pronto não chegou dentro do prazo de {seconds:g} s ({stage}). Tente de novo mais tarde."
+SNAPSHOT_TOO_LARGE = "O índice pronto passou do limite de {limit} bytes ({stage}). Download recusado."
+SNAPSHOT_NO_SPACE = "Espaço livre insuficiente em {path} para o índice pronto (reserva de {reserve} bytes)."
+SNAPSHOT_REFUSED_URL = "Endereço do índice pronto recusado: {url} ({reason})."
+SNAPSHOT_UNUSABLE = "O índice baixado não serve para consulta ({details}). O índice atual foi mantido."
+INDEX_IN_USE = (
+    "Não consegui substituir {path}: o arquivo está em uso. Feche os clientes MCP que usam o leis-mcp e tente de novo."
+)
+CONTENT_UNAVAILABLE = (
+    "Não consegui baixar {path} do GitHub. Verifique a conexão; sem um clone local (`leis-mcp index --from-git`) "
+    "não há outra fonte."
+)
 GIT_FAILED = "Falha ao executar git {command}: {details}"
 CLI_ERROR = "erro: {error}"
 
