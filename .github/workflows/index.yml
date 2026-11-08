@@ -4,9 +4,9 @@ name: Index
 # Assets live in the `index` prerelease: index.json names the current archive, whose name carries the commit
 # and the content hash. The new archive goes up before index.json, so a manifest always has its archive.
 
+# This fork does not publish its own index: production reads the upstream release (LEIS_MCP_INDEX_URL default),
+# validated row by row, with git as fallback. The weekly schedule is off; run it by hand if that ever changes.
 on:
-  schedule:
-    - cron: "0 6 * * 1" # Mondays, 03:00 in Brasília
   workflow_dispatch:
 
 concurrency:

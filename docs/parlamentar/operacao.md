@@ -123,3 +123,26 @@ Se qualquer item falha, o índice e o overlay ficam byte a byte como estavam e o
 URL assinada de redirecionamento, usuário/senha e query string não entram em mensagem de erro nem nos logs do `httpx` e do `httpcore` (inclusive o `Location` em DEBUG). O log do clone também omite usuário e senha da URL do repositório.
 
 No Fly, o volume já tem o clone e o índice montado por git. O primeiro `update` depois do deploy compara o commit e só baixa se mudou. O processo no ar continua com o índice antigo aberto até reiniciar, como antes.
+
+## Deploy (a partir da integração 0.2.0)
+
+O deploy é o workflow manual `.github/workflows/deploy.yml` (Actions → Deploy → Run workflow), só a partir de `main`. Ele precisa do segredo de repositório `FLY_API_TOKEN`, um token de deploy restrito ao app:
+
+```bash
+fly tokens create deploy -a leis-mcp-andremog   # copie o valor para Settings → Secrets and variables → Actions → FLY_API_TOKEN
+```
+
+O workflow executa, nesta ordem:
+
+1. Verifica que `LEIS_MCP_API_KEY` existe nos secrets do app. Sem ela, o `/mcp` ficaria aberto.
+2. Registra a imagem em produção como alvo de rollback. Se não conseguir lê-la, o alvo é `rev-486b4e0`.
+3. Roda `flyctl deploy --remote-only` com o rótulo `rev-<sha>`. Não muda volume, auth nem `fly.toml`.
+4. Faz o smoke: `/health` 200, `/mcp` 401 sem chave e 401 com chave errada.
+5. Se o smoke falhar, roda `flyctl deploy --image <imagem anterior>`.
+
+O teste das quatro ferramentas com a chave verdadeira continua manual: o smoke do passo 8 do plano.
+
+Decisões do dono, delegadas em 8 de novembro de 2026:
+
+- O `.github/workflows/index.yml` herdado do upstream ficou só com disparo manual, sem agendamento: o fork não publica índice próprio, e o plano não cria rotina nova.
+- `LEIS_MCP_INDEX_URL` continua no padrão, a release do upstream. Cada linha do índice é validada, o texto das normas vem do `ctresb/leis` e só entra no cache se o hash git do blob conferir, e o `update` cai no git quando o snapshot é recusado.
