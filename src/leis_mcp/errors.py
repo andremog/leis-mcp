@@ -13,6 +13,18 @@ class IndexMissingError(LeisMcpError):
     pass
 
 
+class IndexPreparingError(LeisMcpError):
+    """The index is still being prepared in the background."""
+
+
+class SnapshotError(LeisMcpError):
+    """The prebuilt index could not be downloaded or failed verification."""
+
+
+class ContentUnavailableError(LeisMcpError):
+    pass
+
+
 class GitError(LeisMcpError):
     def __init__(self, command: str, details: str):
         super().__init__(messages.GIT_FAILED.format(command=command, details=details.strip() or "?"))

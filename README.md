@@ -25,7 +25,9 @@
 
 <br>
 
-**leis-mcp** é um servidor [MCP](https://modelcontextprotocol.io/) que dá ao Claude Code, ao Claude Desktop e a qualquer cliente MCP acesso à legislação brasileira do repositório público [ctresb/leis](https://github.com/ctresb/leis). Em vez de parafrasear de memória, o assistente busca a norma, lê o dispositivo e cita o texto exato, com a fonte oficial e os avisos de revogação.
+<!-- mcp-name: io.github.mazulo/leis-mcp -->
+
+**leis-mcp** é um servidor [MCP](https://modelcontextprotocol.io/) que dá ao Claude Code, ao Claude Desktop, ao Cursor, ao VS Code, ao Codex e a qualquer cliente MCP acesso à legislação brasileira do repositório público [ctresb/leis](https://github.com/ctresb/leis). Em vez de parafrasear de memória, o assistente busca a norma, lê o dispositivo e cita o texto exato, com a fonte oficial e os avisos de revogação.
 
 ```text
 ler_artigo("8245/1991", "23", inciso="III")
@@ -41,15 +43,18 @@ ler_artigo("8245/1991", "23", inciso="III")
 - 🔗 **Sempre com fonte.** Cada resposta traz o link oficial (`normas.leg.br`, LexML) e o caminho no acervo.
 - ⚠️ **Avisos automáticos.** Norma revogada, texto não compilado, dispositivo revogado ou vetado, trecho tachado.
 - 🗂️ **Acervo inteiro.** Normas federais, estaduais, municipais e de reguladores, com mais de 40 apelidos (`CLT`, `CDC`, `LGPD`, `lei do inquilinato`…).
-- ⚡ **Rápido e local.** Índice SQLite em ~6 s, conteúdo baixado sob demanda e conferido pelo hash do blob. O que está em cache funciona offline.
+- ⚡ **Rápido e local.** Índice SQLite pronto, atualizado toda semana, e conteúdo baixado sob demanda e conferido pelo hash do blob. O que está em cache funciona offline.
 - 🔒 **Só leitura.** O repositório de origem nunca é alterado.
 
 ## Início rápido
 
-Requisitos: [uv](https://docs.astral.sh/uv/) e git. O [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) é recomendado.
+> [!TIP]
+> **Usa o Claude Desktop e não quer mexer no terminal?** Baixe o [**leis-mcp.mcpb**](https://github.com/mazulo/leis-mcp/releases/latest/download/leis-mcp.mcpb) e abra o arquivo. O Claude Desktop mostra a tela de instalação e cuida do resto, inclusive do Python.
+
+Requisito: [uv](https://docs.astral.sh/uv/). O [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) é recomendado.
 
 ```bash
-uvx leis-mcp index                          # clone leve + índice (~1 min na primeira vez)
+uvx leis-mcp index                          # baixa o índice pronto (~100 MB, só na primeira vez)
 claude mcp add leis -- uvx leis-mcp serve
 ```
 
@@ -122,17 +127,7 @@ claude mcp add leis -- uv --directory "$PWD" run leis-mcp serve
 
 ## Clientes
 
-### Claude Code
-
-```bash
-claude mcp add leis -- uvx leis-mcp serve
-```
-
-Use `-s user` para disponibilizar em todos os projetos e `-s project` para gravar em `.mcp.json`.
-
-### Claude Desktop
-
-Em `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`):
+Funciona em qualquer cliente MCP. Todos rodam o mesmo comando, `uvx leis-mcp serve`, depois de um `uvx leis-mcp index`. A maioria aceita esta configuração padrão:
 
 ```json
 {
@@ -145,7 +140,145 @@ Em `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`)
 }
 ```
 
-Se o Desktop não achar o `uvx`, use o caminho absoluto (`which uvx`).
+[<img src="https://img.shields.io/badge/Claude_Desktop-Baixar_.mcpb-D97757?style=for-the-badge" alt="Baixar a extensão para o Claude Desktop" height="32">](https://github.com/mazulo/leis-mcp/releases/latest/download/leis-mcp.mcpb)
+[<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Instalar no Cursor" height="32">](https://cursor.com/en/install-mcp?name=leis&config=eyJjb21tYW5kIjoidXZ4IGxlaXMtbWNwIHNlcnZlIn0%3D)
+[<img src="https://img.shields.io/badge/VS_Code-Instalar-0098FF?style=for-the-badge" alt="Instalar no VS Code" height="32">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522leis%2522%252C%2522command%2522%253A%2522uvx%2522%252C%2522args%2522%253A%255B%2522leis-mcp%2522%252C%2522serve%2522%255D%257D)
+[<img src="https://img.shields.io/badge/VS_Code_Insiders-Instalar-24bfa5?style=for-the-badge" alt="Instalar no VS Code Insiders" height="32">](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522leis%2522%252C%2522command%2522%253A%2522uvx%2522%252C%2522args%2522%253A%255B%2522leis-mcp%2522%252C%2522serve%2522%255D%257D)
+
+> [!NOTE]
+> Apps de interface gráfica no macOS (Claude Desktop, Cursor, Windsurf) nem sempre herdam o `PATH` do terminal. Se o cliente não achar o `uvx`, troque `"uvx"` pelo caminho absoluto que `which uvx` mostra.
+
+<details open>
+<summary><b>Claude Code</b></summary>
+
+```bash
+claude mcp add leis -- uvx leis-mcp serve
+```
+
+Use `-s user` para disponibilizar em todos os projetos e `-s project` para gravar em `.mcp.json`.
+
+</details>
+
+<details>
+<summary><b>Claude Desktop</b></summary>
+
+O jeito mais simples é a extensão: baixe o [**leis-mcp.mcpb**](https://github.com/mazulo/leis-mcp/releases/latest/download/leis-mcp.mcpb), abra o arquivo e clique em **Instalar**. Não precisa de terminal, uv nem Python: o Claude Desktop instala tudo. Na primeira pergunta ele baixa o índice (~100 MB), o que leva um ou dois minutos.
+
+Para configurar à mão, use a configuração padrão em `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`). O atalho é *Settings → Developer → Edit Config*. Reinicie o app depois de salvar.
+
+</details>
+
+<details>
+<summary><b>Cursor</b></summary>
+
+Clique no botão **Instalar no Cursor** acima, ou use a configuração padrão em `~/.cursor/mcp.json` (global) ou `.cursor/mcp.json` (no projeto).
+
+</details>
+
+<details>
+<summary><b>VS Code (GitHub Copilot)</b></summary>
+
+Clique no botão **Instalar no VS Code** acima, ou rode:
+
+```bash
+code --add-mcp '{"name":"leis","command":"uvx","args":["leis-mcp","serve"]}'
+```
+
+Para registrar só no projeto, crie `.vscode/mcp.json`. Repare que a chave aqui é `servers`:
+
+```json
+{
+  "servers": {
+    "leis": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["leis-mcp", "serve"]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Windsurf</b></summary>
+
+Use a configuração padrão em `~/.codeium/windsurf/mcp_config.json`, ou pelo painel do Cascade em *MCP Servers → Configure*.
+
+</details>
+
+<details>
+<summary><b>Codex (OpenAI)</b></summary>
+
+```bash
+codex mcp add leis -- uvx leis-mcp serve
+```
+
+Ou em `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.leis]
+command = "uvx"
+args = ["leis-mcp", "serve"]
+```
+
+</details>
+
+<details>
+<summary><b>Gemini CLI</b></summary>
+
+Use a configuração padrão em `~/.gemini/settings.json` (global) ou `.gemini/settings.json` (no projeto).
+
+</details>
+
+<details>
+<summary><b>GitHub Copilot CLI</b></summary>
+
+Rode `/mcp add` dentro do Copilot CLI, ou edite `~/.copilot/mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "leis": {
+      "type": "local",
+      "command": "uvx",
+      "args": ["leis-mcp", "serve"],
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>opencode</b></summary>
+
+Em `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "leis": {
+      "type": "local",
+      "command": ["uvx", "leis-mcp", "serve"],
+      "enabled": true
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>Outros clientes</b></summary>
+
+O leis-mcp é publicado no [MCP Registry](https://registry.modelcontextprotocol.io/) oficial como `io.github.mazulo/leis-mcp`, então clientes com busca de servidores, como a galeria de MCP do VS Code, o encontram pelo nome.
+
+Cline, Kiro, Goose, Warp, Zed, LM Studio e outros aceitam servidores stdio. Cadastre o comando `uvx` com os argumentos `leis-mcp serve`, ou cole a configuração padrão onde o cliente pedir. Se o cliente só fala HTTP, veja [HTTP](#http).
+
+</details>
 
 ### Docker
 
@@ -262,14 +395,17 @@ flowchart LR
     server --> index[("Índice SQLite<br>1,2 M normas")]
     server --> cache[("Cache por blob")]
     cache -. "sob demanda,<br>fixado no commit" .-> raw["raw.githubusercontent.com<br>ctresb/leis"]
-    index -. "git ls-tree" .-> clone["Clone leve<br>só árvores"]
+    index -. "download semanal" .-> release["Release 'index'<br>deste repositório"]
+    index -. "--from-git" .-> clone["Clone leve<br>só árvores"]
 ```
 
 | Peça | O que faz |
 |---|---|
-| Clone leve | `git clone --depth 1 --filter=blob:none --sparse` baixa só as árvores (~250 MB), sem o conteúdo das normas. |
-| Índice SQLite | `git ls-tree` sobre o commit gera uma tabela com caminho, blob, esfera, tipo, ano, número, data, UF, município e órgão (~1,2 M linhas em ~6 s, ~350 MB). Não usa rede. |
-| Conteúdo sob demanda | Cada norma é baixada do `raw.githubusercontent.com` fixada no commit indexado (~0,4 s), conferida contra o hash do blob git e guardada em `cache/objects/<blob>`. Se a rede falhar, o fallback é `git cat-file`, lento na primeira vez (~30 s). |
+| Índice pronto | Toda segunda-feira o workflow [Index](.github/workflows/index.yml) monta o índice e publica no release [`index`](https://github.com/mazulo/leis-mcp/releases/tag/index) (~100 MB em gzip). `leis-mcp index` baixa esse arquivo e confere o sha256 e o commit, sem precisar de git. |
+| Clone leve | Com `--from-git`, `git clone --depth 1 --filter=blob:none --sparse` baixa só as árvores (~250 MB), sem o conteúdo das normas. |
+| Índice SQLite | `git ls-tree` sobre o commit gera uma tabela com caminho, blob, esfera, tipo, ano, número, data, UF, município e órgão (~1,2 M linhas em ~6 s, ~350 MB). |
+| Primeira execução | Sem índice, `serve` responde ao cliente na hora e prepara o índice em segundo plano. Até terminar, as ferramentas pedem para tentar de novo em instantes. |
+| Conteúdo sob demanda | Cada norma é baixada do `raw.githubusercontent.com` fixada no commit indexado (~0,4 s), conferida contra o hash do blob git e guardada em `cache/objects/<blob>`. Se a rede falhar e houver clone, o fallback é `git cat-file`, lento na primeira vez (~30 s). |
 | Parser | Encontra artigos, parágrafos, incisos e alíneas e tolera as variações reais do acervo. |
 | Busca textual | Usa [ripgrep](https://github.com/BurntSushi/ripgrep) nos arquivos em cache, ou Python puro se o `rg` não estiver instalado. |
 
@@ -293,12 +429,12 @@ Os dados ficam em `~/.cache/leis-mcp`, configurável com `LEIS_MCP_HOME`.
 src/leis_mcp/
   config.py, models.py, errors.py, text.py
   messages.py        todo texto devolvido ao usuário (pt-BR)
-  catalog/           GitRepository, PathParser, IndexBuilder / NormIndex (SQLite)
+  catalog/           GitRepository, PathParser, IndexBuilder / NormIndex (SQLite), IndexSnapshot
   references/        ReferenceParser + tabelas de apelidos
   content/           FrontMatterParser, ContentStore (cache por blob)
   legal_text/        labels (Art., §, inciso, alínea), DocumentParser, ProvisionExtractor, notices
   search/            AccentInsensitivePattern, RipgrepEngine / PythonEngine, TextSearch
-  services/          NormResolver, NormLoader, NormPresenter, LegislationService (fachada)
+  services/          NormResolver, NormLoader, NormPresenter, LegislationService (fachada), ServiceProvider
   server/            LeisServer: adaptador MCP (nomes de ferramentas e parâmetros em pt-BR)
   cli.py             Cli: serve, index, update, status, warm, read
 ```
@@ -312,8 +448,10 @@ O código é em inglês; só o que chega ao usuário (respostas, erros, descriç
 Rode com `uvx leis-mcp <comando>` ou, no código-fonte, com `uv run leis-mcp <comando>`:
 
 ```bash
-leis-mcp index                         # clone leve + índice
-leis-mcp update                        # git fetch + reindexação
+leis-mcp index                         # baixa o índice pronto (usa git se o download falhar)
+leis-mcp index --from-git              # clone leve + índice montado localmente
+leis-mcp update                        # baixa o índice novo, se o commit mudou
+leis-mcp update --from-git             # git fetch + reindexação
 leis-mcp status                        # commit indexado, total, itens em cache
 leis-mcp warm                          # pré-carrega as leis dos apelidos
 leis-mcp warm --no-aliases --sphere federal --kind leis-complementares
@@ -321,7 +459,7 @@ leis-mcp read "Lei 8.245/91" 23 -c III # testa sem cliente MCP (-p parágrafo, -
 leis-mcp serve                         # stdio (padrão)
 ```
 
-Se o índice não existir, `serve` gera o índice antes de iniciar. Ainda assim, rode `index` antes para o cliente não esperar.
+Se o índice não existir, `serve` inicia na hora e prepara o índice em segundo plano. Rodar `index` antes evita que as primeiras perguntas recebam o aviso de "preparando".
 
 ## Testes
 

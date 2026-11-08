@@ -1,0 +1,80 @@
+name: Index
+
+# Publishes the prebuilt index that `leis-mcp index` and first runs download, so users need no git.
+# Assets live in the `index` prerelease: index.json names the current archive, whose name carries the commit
+# and the content hash. The new archive goes up before index.json, so a manifest always has its archive.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays, 03:00 in Brasília
+  workflow_dispatch:
+
+concurrency:
+  group: index
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build and publish the index
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      LEIS_MCP_HOME: /tmp/leis-mcp
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Build the index from git
+        run: uv run --no-dev leis-mcp index --from-git
+
+      - name: Package
+        id: package
+        shell: python
+        run: |
+          import gzip, hashlib, json, os, shutil, sqlite3
+          from pathlib import Path
+
+          db = Path(os.environ["LEIS_MCP_HOME"]) / "index.sqlite"
+          with sqlite3.connect(db) as conn:
+              meta = dict(conn.execute("SELECT key, value FROM meta"))
+              norms = conn.execute("SELECT count(*) FROM norms").fetchone()[0]
+          packed = Path("index.sqlite.gz")
+          with db.open("rb") as source, gzip.open(packed, "wb", compresslevel=6) as target:
+              shutil.copyfileobj(source, target, 1 << 20)
+          sha256 = hashlib.sha256(packed.read_bytes()).hexdigest()
+          # Named by commit and content, so a rerun never overwrites the archive index.json points to.
+          archive = packed.rename(f"index-{meta['commit'][:12]}-{sha256[:12]}.sqlite.gz")
+          manifest = {
+              "commit": meta["commit"],
+              "built_at": meta["built_at"],
+              "norms": norms,
+              "archive": archive.name,
+              "sha256": sha256,
+          }
+          Path("index.json").write_text(json.dumps(manifest, indent=2))
+          print(json.dumps(manifest, indent=2))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"archive={archive.name}\n")
+
+      - name: Publish to the index release
+        env:
+          ARCHIVE: ${{ steps.package.outputs.archive }}
+        run: |
+          if ! gh release view index >/dev/null 2>&1; then
+            gh release create index --prerelease --title "Índice pré-montado" \
+              --notes "Índice do ctresb/leis baixado por \`leis-mcp index\`. Atualizado toda semana pelo workflow Index."
+          fi
+          gh release upload index "$ARCHIVE" --clobber
+          gh release upload index index.json --clobber
+          # Older archives are no longer referenced by index.json.
+          gh release view index --json assets --jq '.assets[].name' \
+            | grep -E '^index-[0-9a-f-]+\.sqlite\.gz$' | grep -vxF "$ARCHIVE" \
+            | xargs -r -n1 gh release delete-asset index --yes
