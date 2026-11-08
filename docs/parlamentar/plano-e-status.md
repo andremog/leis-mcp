@@ -88,6 +88,35 @@ QA independente e revisão de segurança independente acontecem antes de push do
 
 A rotina semanal de domingo, 3h, permanece só no acervo upstream.
 
+## Status em 8 de novembro de 2026: gates de QA e segurança aprovados
+
+Revisões independentes (revisores que não escreveram o código), em rodadas sobre cada correção, até o artefato final:
+
+| Rodada | QA | Segurança |
+|---|---|---|
+| `8b09e76` | PASS, 5 P2 | PASS, 4 P2 novos; P1-020-1 e P1-020-2 do candidato antigo corrigidos |
+| `d62b6aa` | PASS, 4 P2 | PASS, 3 P2 |
+| `0c89f78` | PASS, 3 P2 | PASS, 1 P2 (N7, custo do filtro de log) |
+| `67671ee` | PASS, 2 P2 | PASS, 1 P2 (N8) |
+| `5a2ef28` | PASS final | PASS final |
+| `45940c7` | — (só a correção do R1 da segurança) | PASS (adendo) |
+
+Nenhuma rodada encontrou P0 ou P1. Os relatórios estão em [revisoes/](revisoes/) (`qa-020-*.md`, `seguranca-020-*.md`). QA020-R01, QA020-R02, P1-020-1, P1-020-2 e P2-020-4 estão fechados; P2-020-5 fechado, com resíduo informativo (NAT64).
+
+Evidência do autor no artefato final: 274 testes fora de `integration` passam; integração 21 passam e 1 falha (`test_bounded_official_resolution_page`, DNS direto de `www2.camara.leg.br` não resolve no sandbox; nunca passou aqui e precisa de uma execução em ambiente com rede). Índice real baixado e validado em cerca de 19 s, pico de cerca de 40 MB de RSS.
+
+P2 residuais para acompanhamento (não bloqueiam):
+
+- O workflow `.github/workflows/index.yml`, herdado do upstream, é agendado toda semana com permissão de escrita em releases e apaga os arquivos antigos na hora (P2-020-6). Decisão do dono: manter, desligar o agendamento, ou publicar o índice do fork e apontar `LEIS_MCP_INDEX_URL` para ele.
+- O publicador padrão é de terceiro (`mazulo/leis-mcp`) e redirects HTTPS para outro host são seguidos (P2-020-3). Decisão do dono.
+- O validador exige o esquema do `IndexBuilder` e os metadados do `PathParser` locais. Se o upstream mudar esse código, o `update` cai no git até `catalog/index.py` e `catalog/path_parser.py` serem sincronizados.
+- Corrupção que só aparece no meio de uma consulta não dispara o reparo automático; rodar `leis-mcp update`.
+- O caminho git não tem orçamento próprio de disco ou de tempo (vem de antes desta onda).
+- Formatos incomuns de URL em mensagens de erro podem escapar do filtro de segunda camada do log do servidor; os logs do httpx e do httpcore são tratados na origem.
+- Não verificado no Fly: validação e pico de disco no volume de 2 GB e comportamento sob OOM na VM de 512 MB.
+
+Push, PR e deploy dependem do dono. O deploy no Fly segue o passo 7 de "Se o dono pedir para retomar" (rollback para `rev-486b4e0` guardado; auth e volume sem mudança) e o smoke do passo 8.
+
 ## Status em 8 de novembro de 2026, 17:08, São Paulo: retomada pelo dono
 
 O dono pediu para refazer. O candidato `a847025` não está no GitHub (o servidor responde `not our ref`) e não foi recuperado. A integração foi refeita do zero na branch `feat/parlamentar-020`:
