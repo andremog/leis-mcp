@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 
 from .. import messages
+from ..catalog.snapshot import scrub_urls
 from ..config import Settings
 from ..errors import IndexMissingError, IndexPreparingError, SnapshotError
 from .legislation import LegislationService
@@ -28,6 +29,7 @@ class ServiceProvider:
         self._service: LegislationService | None = None
         self._error: Exception | None = None
         self._failed_at = 0.0
+        self._repaired_at = float("-inf")
         self._worker: threading.Thread | None = None
         self._lock = threading.Lock()
 
@@ -51,14 +53,20 @@ class ServiceProvider:
             except (sqlite3.DatabaseError, IndexMissingError) as exc:  # damaged on disk: prepare a new one
                 log.warning("Local index unreadable (%s); preparing a new one in the background", type(exc).__name__)
                 repair = True
+        waiting = messages.INDEX_REPAIRING if repair else messages.INDEX_PREPARING
         if self._worker is not None and self._worker.is_alive():
-            raise IndexPreparingError(messages.INDEX_PREPARING)
+            raise IndexPreparingError(waiting)
         error = self._error
         if error is not None and time.monotonic() - self._failed_at < self.RETRY_AFTER:
             raise IndexPreparingError(messages.INDEX_FAILED.format(error=self._public(error))) from error
+        if repair and time.monotonic() - self._repaired_at < self.RETRY_AFTER:
+            # A repair finished but the index is still unreadable: no new download before RETRY_AFTER.
+            raise IndexPreparingError(messages.INDEX_FAILED.format(error=messages.INDEX_FAILED_DETAILS_IN_LOG))
         self._error = None
+        if repair:
+            self._repaired_at = time.monotonic()
         self._start_worker(repair)  # first attempt, or a retry once RETRY_AFTER has passed
-        raise IndexPreparingError(messages.INDEX_PREPARING)
+        raise IndexPreparingError(waiting)
 
     @staticmethod
     def _public(error: Exception) -> str:
@@ -77,7 +85,8 @@ class ServiceProvider:
         try:
             self._prepare()
         except Exception as exc:  # noqa: BLE001 - reported by the next tool call
-            log.exception("Index preparation failed")
+            # No traceback: a git failure carries the full command, and a repository URL may hold a token.
+            log.error("Index preparation failed: %s: %s", type(exc).__name__, scrub_urls(str(exc)))
             with self._lock:
                 self._error = exc
                 self._failed_at = time.monotonic()

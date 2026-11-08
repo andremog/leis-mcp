@@ -52,11 +52,11 @@ Clock = Callable[[], float]
 _HEX = frozenset("0123456789abcdef")
 
 
-_QUERY = re.compile(r"(https?://[^\s'\"?#]+)[?#][^\s'\"]*")
-_USERINFO = re.compile(r"(https?://)[^/\s'\"@]+@")
+_QUERY = re.compile(r"((?:https?://|/)[^\s'\"?#]*)[?#][^'\"]*", re.IGNORECASE)
+_USERINFO = re.compile(r"(https?://)[^/\s'\"@]+@", re.IGNORECASE)
 
 
-def _scrub(text: str) -> str:
+def scrub_urls(text: str) -> str:
     """Drops query strings, fragments and user info from every URL in `text`."""
     return _USERINFO.sub(r"\1", _QUERY.sub(r"\1", text))
 
@@ -67,7 +67,7 @@ class _RedactQuery(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         message = record.getMessage()
-        scrubbed = _scrub(message)
+        scrubbed = scrub_urls(message)
         if scrubbed != message:
             record.msg, record.args = scrubbed, None
         return True
@@ -177,7 +177,7 @@ class _DeadlineBackend(httpcore.NetworkBackend):
                     local_address=local_address,
                     socket_options=socket_options,
                 )
-            except httpcore.ConnectError as exc:
+            except (httpcore.ConnectError, httpcore.ConnectTimeout) as exc:  # next address, same deadline
                 last = exc
                 continue
             return _DeadlineStream(stream, self)
@@ -282,6 +282,7 @@ class IndexSnapshot:
             _normal("CREATE TABLE sqlite_stat4(tbl,idx,neq,nlt,ndlt,sample)"),
         }
     )
+    _ROW_CHECK_EVERY = 20_000  # rows between deadline checks
     _MAX_VALUE = 1 << 20  # bytes; the longest legitimate value is a path or a commit
 
     def __init__(
@@ -443,7 +444,7 @@ class IndexSnapshot:
                     raise
         except MemoryError as exc:
             raise SnapshotResourceError(messages.SNAPSHOT_UNUSABLE.format(details="memória")) from exc
-        except (sqlite3.Error, ValueError, RecursionError) as exc:
+        except (sqlite3.Error, ValueError, TypeError, RecursionError) as exc:
             raise SnapshotError(messages.SNAPSHOT_UNUSABLE.format(details=type(exc).__name__)) from exc
 
     def _inspect(self, db: sqlite3.Connection, thorough: bool, deadline: _Deadline | None) -> _Checked:
@@ -505,7 +506,7 @@ class IndexSnapshot:
         columns = COLUMNS[2:]
         cursor = db.execute(f"SELECT path, {', '.join(columns)} FROM norms")
         for count, (path, *values) in enumerate(cursor, 1):
-            if count % 20_000 == 0 and deadline is not None:
+            if count % self._ROW_CHECK_EVERY == 0 and deadline is not None:
                 deadline.remaining()
             if not paths.is_indexable(path):
                 raise unusable(f"caminho não indexável {path[:80]!r}")
@@ -595,7 +596,7 @@ class IndexSnapshot:
                 return
             except httpx.TimeoutException as exc:
                 raise SnapshotResourceError(deadline.message()) from exc
-            except httpx.HTTPError as exc:
+            except (httpx.HTTPError, httpx.InvalidURL, ValueError, RecursionError) as exc:
                 details = type(exc).__name__  # httpx messages can carry the signed URL
                 raise SnapshotError(messages.SNAPSHOT_FAILED.format(url=self._safe(current), details=details)) from exc
             finally:

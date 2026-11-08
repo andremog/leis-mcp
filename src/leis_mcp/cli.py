@@ -124,11 +124,20 @@ class Cli:
             self._print(asdict(self._builder().build(self._repository.fetch_latest())))
             return
         snapshot = self._snapshot()
-        manifest = snapshot.latest()
-        if snapshot.installed_commit() == manifest["commit"]:
-            self._print({"commit": manifest["commit"], "updated": False})
-            return
-        self._print(asdict(snapshot.download(manifest)))
+        try:
+            manifest = snapshot.latest()
+            if snapshot.installed_commit() == manifest["commit"]:
+                self._print({"commit": manifest["commit"], "updated": False})
+                return
+            self._print(asdict(snapshot.download(manifest)))
+        except SnapshotResourceError:
+            raise
+        except SnapshotError as exc:  # e.g. the publisher changed its builder: keep the corpus fresh from git
+            if shutil.which("git") is None:
+                raise
+            log.warning("Prebuilt index refused (%s); updating from git instead.", exc)
+            self._repository.clone()
+            self._print(asdict(self._builder().build(self._repository.fetch_latest())))
 
     def _status(self, _: argparse.Namespace) -> None:
         self._print(self._service().status())

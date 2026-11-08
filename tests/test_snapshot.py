@@ -18,6 +18,7 @@ from leis_mcp.catalog.snapshot import Limits
 from leis_mcp.cli import Cli
 from leis_mcp.config import Settings
 from leis_mcp.errors import GitError, IndexPreparingError, SnapshotError, SnapshotResourceError
+from leis_mcp.models import IndexStats
 from leis_mcp.services import ServiceProvider
 
 COMMIT = "a" * 40
@@ -189,6 +190,14 @@ UNUSABLE = {
     ),
     "path the builder would skip": "UPDATE norms SET path = 'federal/leis-ordinarias/2000/_falhas.md' WHERE rowid = 2;",
     "wal mode": "PRAGMA journal_mode = WAL;",
+    "extra column": "ALTER TABLE norms ADD COLUMN extra TEXT;",
+    "generated column": "ALTER TABLE norms ADD COLUMN g TEXT GENERATED ALWAYS AS (upper(path)) VIRTUAL;",
+    "value over 1 MiB": "UPDATE meta SET value = printf('%.*c', 2097152, 'x') WHERE key = 'built_at'; "
+    "INSERT OR REPLACE INTO meta VALUES ('built_at', printf('%.*c', 2097152, 'x'));",
+    "forged statistics table": (
+        "ANALYZE; PRAGMA writable_schema = ON; UPDATE sqlite_master"
+        " SET sql = 'CREATE TABLE sqlite_stat1(tbl,idx,stat,extra)' WHERE name = 'sqlite_stat1';"
+    ),
 }
 
 
@@ -524,6 +533,7 @@ def cli_with(tmp_path, monkeypatch, handler):
     class Builder:
         def build(self, commit=None):
             builds.append("git")
+            return IndexStats(COMMIT, 1, 0.0)
 
     monkeypatch.setattr(cli, "_snapshot", lambda: snap)
     monkeypatch.setattr(cli, "_builder", lambda: Builder())
@@ -754,10 +764,28 @@ def test_provider_repairs_an_unreadable_index_in_the_background(tmp_path):
         repaired.set()
 
     provider = ServiceProvider(settings, factory=factory, prepare=prepare)
-    with pytest.raises(IndexPreparingError, match="Preparando"):
+    with pytest.raises(IndexPreparingError, match="ilegível"):
         provider.get()
     provider._worker.join(5)
     assert provider.get() == "service"
+
+
+def test_failed_repair_waits_before_downloading_again(tmp_path):
+    settings = Settings(home=tmp_path)
+    settings.db_path.write_bytes(b"not sqlite")
+    attempts = []
+
+    def factory():
+        raise sqlite3.DatabaseError("file is not a database")
+
+    provider = ServiceProvider(settings, factory=factory, prepare=lambda: attempts.append(1))
+    with pytest.raises(IndexPreparingError):
+        provider.get()
+    provider._worker.join(5)
+    for _ in range(10):
+        with pytest.raises(IndexPreparingError):
+            provider.get()
+    assert attempts == [1]
 
 
 def test_debug_logs_of_httpcore_omit_signed_location(tmp_path, caplog, no_proxy):
@@ -802,3 +830,82 @@ def test_collector_refuses_site_local_and_multicast(address):
 
     with pytest.raises(FetchRejected):
         validate_url("https://www2.camara.leg.br/x", resolve=resolve)
+
+
+def test_real_statistics_table_is_accepted(tmp_path):
+    snap, _ = snapshot(tmp_path, published(gzip.compress(index_bytes(tmp_path, extra="ANALYZE;"))))
+    assert snap.download().norms == 3
+
+
+def test_row_check_is_cut_at_the_prepare_deadline(tmp_path, monkeypatch):
+    snap, clock, settings = staged(tmp_path, Limits(prepare_seconds=10))
+    parse = PathParser.parse
+
+    def slow_parse(self, path):
+        clock.now += 1
+        return parse(self, path)
+
+    monkeypatch.setattr(PathParser, "parse", slow_parse)
+    monkeypatch.setattr(snap, "_ROW_CHECK_EVERY", 5)
+    with pytest.raises(SnapshotResourceError, match="validação"):
+        snap.download()
+    assert home_files(settings) == []
+
+
+def test_next_address_is_tried_after_a_connect_timeout(tmp_path, no_proxy):
+    clock = Clock()
+    manifest = json.dumps({"commit": COMMIT, "archive": "a.gz", "sha256": "0" * 64}).encode()
+
+    class FirstMute(FakeNetwork):
+        def connect_tcp(self, host, port, timeout=None, **kwargs):
+            if host == "2001:db8::1":
+                self.hosts.append(host)
+                self.clock.now += timeout
+                raise httpcore.ConnectTimeout("silent")
+            return super().connect_tcp(host, port, timeout, **kwargs)
+
+    def two_addresses(host, port, type=None):  # noqa: A002
+        return [(10, 1, 6, "", ("2001:db8::1", port, 0, 0)), (2, 1, 6, "", ("192.0.2.10", port))]
+
+    network = FirstMute(clock, [[(0, response_bytes(manifest))]])
+    settings = Settings(home=tmp_path, index_url=INDEX_URL)
+    snap = IndexSnapshot(
+        settings, limits=Limits(connect_seconds=15), clock=clock, network=network, resolve=two_addresses
+    )
+    assert snap.latest()["archive"] == "a.gz"
+    assert network.hosts == ["2001:db8::1", "192.0.2.10"]
+
+
+def test_update_falls_back_to_git_when_the_snapshot_is_unusable(tmp_path, monkeypatch, capsys):
+    archive = gzip.compress(index_bytes(tmp_path, extra="ALTER TABLE norms ADD COLUMN extra TEXT;"))
+    files = published(archive)
+    cli, builds, settings = cli_with(
+        tmp_path, monkeypatch, lambda request: httpx.Response(200, content=files[request.url.path])
+    )
+    monkeypatch.setattr(cli._repository, "clone", lambda: None)
+    monkeypatch.setattr(cli._repository, "fetch_latest", lambda: COMMIT)
+    cli.run(["update"])
+    assert builds == ["git"]
+
+
+def test_update_never_falls_back_to_git_after_a_budget_refusal(tmp_path, monkeypatch):
+    cli, builds, _ = cli_with(tmp_path, monkeypatch, lambda request: httpx.Response(200, stream=BodyTimeout()))
+    with pytest.raises(SystemExit):
+        cli.run(["update"])
+    assert builds == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Location: HTTPS://cdn.test/a?sig=SECRET",
+        "(b'Location', b'/rel/arc2?token=SECRET')",
+        "https://user:SECRET@host/p",
+        "HTTPS://user:SECRET@host/p",
+        "GET https://cdn.test/a?X-Amz-Signature=SECRET&x=1",
+    ],
+)
+def test_url_scrubbing(line):
+    from leis_mcp.catalog.snapshot import scrub_urls
+
+    assert "SECRET" not in scrub_urls(line)
