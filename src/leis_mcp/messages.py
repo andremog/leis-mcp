@@ -38,6 +38,7 @@ INDEX_MISSING = "Índice não encontrado em {path}. Rode `leis-mcp index` primei
 INDEX_PREPARING = (
     "Preparando o índice das normas (primeira execução, leva de 1 a 3 minutos). Tente de novo em instantes."
 )
+INDEX_REPAIR_FAILED = "o índice baixado para o reparo continua ilegível (rode `leis-mcp update`)."
 INDEX_REPAIRING = "O índice local está ilegível; estou baixando um novo. Tente de novo em instantes."
 INDEX_FAILED = "Não consegui preparar o índice: {error} Tento de novo daqui a pouco."
 INDEX_FAILED_DETAILS_IN_LOG = "a montagem local falhou (detalhes no log do servidor)."

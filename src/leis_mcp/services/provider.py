@@ -61,7 +61,7 @@ class ServiceProvider:
             raise IndexPreparingError(messages.INDEX_FAILED.format(error=self._public(error))) from error
         if repair and time.monotonic() - self._repaired_at < self.RETRY_AFTER:
             # A repair finished but the index is still unreadable: no new download before RETRY_AFTER.
-            raise IndexPreparingError(messages.INDEX_FAILED.format(error=messages.INDEX_FAILED_DETAILS_IN_LOG))
+            raise IndexPreparingError(messages.INDEX_FAILED.format(error=messages.INDEX_REPAIR_FAILED))
         self._error = None
         if repair:
             self._repaired_at = time.monotonic()

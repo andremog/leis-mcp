@@ -52,13 +52,37 @@ Clock = Callable[[], float]
 _HEX = frozenset("0123456789abcdef")
 
 
-_QUERY = re.compile(r"((?:https?://|/)[^\s'\"?#]*)[?#][^'\"]*", re.IGNORECASE)
-_USERINFO = re.compile(r"(https?://)[^/\s'\"@]+@", re.IGNORECASE)
+# Quoted strings or runs without spaces/quotes: each alternative is linear and they start with different
+# characters, so scanning stays linear in the input (a log line can carry a 100 KiB hostile header).
+_TOKEN = re.compile(r"'[^']*'|\"[^\"]*\"|[^\s'\"]+")
+_SCRUB_LIMIT = 16 * 1024
 
 
 def scrub_urls(text: str) -> str:
-    """Drops query strings, fragments and user info from every URL in `text`."""
-    return _USERINFO.sub(r"\1", _QUERY.sub(r"\1", text))
+    """Drops query strings, fragments and user info from every URL (absolute or `/relative`) in `text`."""
+    if len(text) > _SCRUB_LIMIT:
+        text = text[:_SCRUB_LIMIT] + "…"
+    return _TOKEN.sub(_scrub_token, text)
+
+
+def _scrub_token(match: re.Match) -> str:
+    token = match.group(0)
+    quote = token[0] if token[0] in "'\"" else ""
+    inner = token[1:-1] if quote else token
+    scheme = inner.find("://")
+    if scheme < 0 and not inner.startswith("/"):
+        return token
+    after_scheme = scheme + 3 if scheme >= 0 else 0
+    cuts = [index for index in (inner.find("?", after_scheme), inner.find("#", after_scheme)) if index >= 0]
+    if cuts:
+        inner = inner[: min(cuts)]
+    if scheme >= 0:
+        slash = inner.find("/", after_scheme)
+        end = slash if slash >= 0 else len(inner)
+        authority = inner[after_scheme:end]
+        if "@" in authority:
+            inner = inner[:after_scheme] + authority.rsplit("@", 1)[1] + inner[end:]
+    return f"{quote}{inner}{quote}"
 
 
 class _RedactQuery(logging.Filter):
@@ -312,7 +336,7 @@ class IndexSnapshot:
         self._get(url, deadline, self._limits.manifest_bytes, "manifesto", chunks.append)
         try:
             manifest = json.loads(b"".join(chunks))
-        except (ValueError, UnicodeDecodeError) as exc:
+        except (ValueError, UnicodeDecodeError, RecursionError) as exc:
             raise SnapshotError(messages.SNAPSHOT_CORRUPTED.format(details=self.MANIFEST)) from exc
         if not isinstance(manifest, dict) or not all(isinstance(manifest.get(key), str) for key in self._REQUIRED):
             raise SnapshotError(messages.SNAPSHOT_CORRUPTED.format(details=self.MANIFEST))
@@ -559,7 +583,12 @@ class IndexSnapshot:
         for _ in range(self._limits.max_redirects + 1):
             self._require_https(current)
             deadline.remaining()
-            request = self._client.build_request("GET", current, headers={"Accept-Encoding": "identity"})
+            try:
+                request = self._client.build_request("GET", current, headers={"Accept-Encoding": "identity"})
+            except (httpx.InvalidURL, ValueError) as exc:
+                raise SnapshotError(
+                    messages.SNAPSHOT_REFUSED_URL.format(url=self._safe(current), reason="inválida")
+                ) from exc
             self._local.deadline = deadline
             response: httpx.Response | None = None
             try:
@@ -665,8 +694,11 @@ class IndexSnapshot:
     @staticmethod
     def _safe(url: str) -> str:
         """URL without user info, query or fragment: signed redirect targets and tokens stay out of logs."""
-        parts = urlsplit(url)
-        port = f":{parts.port}" if parts.port else ""
+        try:
+            parts = urlsplit(url)
+            port = f":{parts.port}" if parts.port else ""
+        except ValueError:  # e.g. port out of range: never let the redaction itself raise
+            return "(URL inválida)"
         return f"{parts.scheme}://{parts.hostname or ''}{port}{parts.path}"
 
     @staticmethod

@@ -903,9 +903,83 @@ def test_update_never_falls_back_to_git_after_a_budget_refusal(tmp_path, monkeyp
         "https://user:SECRET@host/p",
         "HTTPS://user:SECRET@host/p",
         "GET https://cdn.test/a?X-Amz-Signature=SECRET&x=1",
+        "(b'Location', b'/rel/arc2?x=a SECRET')",
     ],
 )
 def test_url_scrubbing(line):
     from leis_mcp.catalog.snapshot import scrub_urls
 
     assert "SECRET" not in scrub_urls(line)
+
+
+def test_url_scrubbing_keeps_the_rest_of_the_line():
+    from leis_mcp.catalog.snapshot import scrub_urls
+
+    line = 'HTTP Request: GET https://h.test/a?sig=X "HTTP/1.1 200 OK" and path a/b?c not found'
+    assert scrub_urls(line) == 'HTTP Request: GET https://h.test/a "HTTP/1.1 200 OK" and path a/b?c not found'
+
+
+def test_url_scrubbing_is_linear_on_hostile_input():
+    from leis_mcp.catalog.snapshot import scrub_urls
+
+    for hostile in ("/" * 100_000, "https://" + "a/" * 50_000, "'/" + "x" * 100_000):
+        started = time.monotonic()
+        scrub_urls(hostile)
+        assert time.monotonic() - started < 0.05
+
+
+def test_update_without_git_reports_the_snapshot_error(tmp_path, monkeypatch):
+    cli, builds, _ = cli_with(tmp_path, monkeypatch, lambda request: httpx.Response(404))
+    monkeypatch.setattr("leis_mcp.cli.shutil.which", lambda name: None)
+    with pytest.raises(SystemExit):
+        cli.run(["update"])
+    assert builds == []
+
+
+def test_preparation_failure_is_logged_without_traceback(tmp_path, caplog):
+    settings = Settings(home=tmp_path)
+
+    def prepare():
+        raise GitError("clone", "fatal: https://user:repopass@host/r?tok=T")
+
+    provider = ServiceProvider(settings, factory=lambda: "service", prepare=prepare)
+    with caplog.at_level("INFO"):
+        provider.start()
+        provider._worker.join(5)
+    records = [r for r in caplog.records if "preparation failed" in r.getMessage()]
+    assert records and all(r.exc_info is None for r in records)
+    assert "repopass" not in caplog.text and "tok=T" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        b"[" * 20_000 + b"]" * 20_000,  # under the 64 KiB cap, deep enough for RecursionError
+        json.dumps({"commit": COMMIT, "archive": "a\r\nb.gz", "sha256": "0" * 64}).encode(),
+    ],
+)
+def test_hostile_manifest_is_a_snapshot_error(tmp_path, manifest):
+    snap, _ = snapshot(tmp_path, {"/index/index.json": manifest})
+    with pytest.raises(SnapshotError):
+        snap.download()
+
+
+def test_redirect_to_an_invalid_port_is_a_snapshot_error(tmp_path):
+    def handler(request):
+        if request.url.port == 99999:
+            return httpx.Response(500)
+        return httpx.Response(302, headers={"location": "https://h.test:99999/x"})
+
+    transport = httpx.MockTransport(handler)
+    snap = IndexSnapshot(Settings(home=tmp_path, index_url=INDEX_URL), httpx.Client(transport=transport))
+    with pytest.raises(SnapshotError):
+        snap.latest()
+
+
+def test_blob_typed_path_is_refused(tmp_path):
+    extra = "UPDATE norms SET path = CAST('federal/x.md' AS BLOB) WHERE rowid = 2;"
+    snap, settings = snapshot(tmp_path, published(gzip.compress(index_bytes(tmp_path, extra=extra))))
+    previous = install_previous(settings, tmp_path)
+    with pytest.raises(SnapshotError):
+        snap.download()
+    assert_previous_kept(settings, previous)
