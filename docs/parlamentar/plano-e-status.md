@@ -88,7 +88,33 @@ QA independente e revisão de segurança independente acontecem antes de push do
 
 A rotina semanal de domingo, 3h, permanece só no acervo upstream.
 
-## Status em 8 de novembro de 2026, 16:41, São Paulo
+## Status em 8 de novembro de 2026, 17:08, São Paulo: retomada pelo dono
+
+O dono pediu para refazer. O candidato `a847025` não está no GitHub (o servidor responde `not our ref`) e não foi recuperado. A integração foi refeita do zero na branch `feat/parlamentar-020`:
+
+1. Merge do PR 3 (`83cfe3c`) com a 0.2.0 oficial do upstream (`3f275e2`). Conflitos em `cli.py`, `config.py` e `server/app.py` resolvidos mantendo Bearer, `/health`, warm-up, overlay e o `ServiceProvider` do upstream.
+2. `catalog/snapshot.py` reescrito para fechar os achados que bloquearam o candidato:
+   - QA020-R01 e P1-020-2: prazo total por etapa aplicado em toda chamada de socket, inclusive nos cabeçalhos; tetos de tamanho e de disco; timeout ou recusa de orçamento vira `SnapshotResourceError`, sem fallback para o git.
+   - P1-020-1 e QA020-R02: validação estrutural antes da troca.
+   - P2-020-4: URL assinada fora dos logs.
+   - P2-020-6: 404 do arquivo relê o manifesto uma vez.
+
+   Os detalhes estão em [operacao.md](operacao.md#índice-pronto-integração-020).
+3. `test_bounded_official_resolution_page` recebeu a marca `integration` (R3). O teste não foi alterado.
+
+Evidência do autor, nesta máquina (não é revisão independente):
+
+- `ruff check` e `ruff format --check` limpos.
+- `pytest -m "not integration"`: 216 passed. Inclui os testes novos de `tests/test_snapshot.py`, entre eles a pilha real httpx → httpcore com backend falso que respeita o timeout recebido. Cabeçalhos lentos (20 fragmentos de 50 s) e corpo lento são recusados dentro de 120 s. Com o limitador desligado, os mesmos testes falham em 1.000 s e 1.050 s, a reprodução da QA.
+- `pytest -m integration`: 21 passed, 1 failed. A falha é `test_bounded_official_resolution_page`: nesta máquina o DNS de `www2.camara.leg.br` não resolve fora do proxy. Não foi convertida em passe.
+- Download real do índice publicado (`c9f21b4`, 1.218.990 normas) em cerca de 11 s, sem git; `update` seguinte devolve `updated: false`.
+- Servidor stdio: as quatro ferramentas, art. 7º da Res. 1/2002-CN com os sete parágrafos, 104-A do Regimento Comum, filtro de órgão e CDC do upstream.
+- Subida a frio: handshake em 0,8 s, "Preparando o índice", pronto em 13 s com o overlay ativado.
+- HTTP local: `/health` 200; `/mcp` 401 sem chave e com chave errada, 200 com a chave. A chave não aparece no log.
+
+Não feito: push, PR, deploy, sondagem da produção e as revisões independentes. Os portões abaixo continuam valendo: QA independente e revisão de segurança independente sobre esta branch antes de push para produção e antes de deploy.
+
+## Status anterior, em 8 de novembro de 2026, 16:41, São Paulo
 
 **Parado pelo dono, depois do pedido de documentação.** A correção seguinte ao candidato abaixo não tem artefato completo. Não retomar sem pedido novo do dono.
 

@@ -19,7 +19,7 @@ Num diretório local só para teste (`/tmp/leis-integration`, apagável), `leis-
 
 Na primeira execução, se `overlay/active.json` não existe, o processo valida o pacote da imagem num staging e só então publica em `versions/` e grava o ponteiro com `origin: bundle`. Se o ponteiro já é `bundle` e a imagem trouxe outra versão, a nova vira a ativa e a anterior fica para rollback. Ponteiro `manual`, `collect` ou `rollback` não é substituído por uma imagem mais nova. Ativar de novo a mesma versão com `--from` ou `collect --activate` muda a origem para `manual` ou `collect` e preserva o campo `previous`. Ativar o pacote da imagem (`overlay activate`, sem `--from`) devolve a origem `bundle`, e a subida seguinte volta a acompanhar a imagem.
 
-`leis-mcp update` continua só no clone e no `index.sqlite`. O processo que já está no ar mantém os arquivos SQLite que abriu. Depois de um update, ou de um rollback, reinicie o app para reler o disco. É o mesmo cuidado que o índice upstream já exigia.
+`leis-mcp update` continua só no `index.sqlite` (e no clone, com `--from-git`). O processo que já está no ar mantém os arquivos SQLite que abriu. Depois de um update, ou de um rollback, reinicie o app para reler o disco. É o mesmo cuidado que o índice upstream já exigia.
 
 Não cron, não `warm` específico e não coleta na subida. A coleta é o comando manual `overlay collect`: não é ferramenta MCP e não entra em agendamento.
 
@@ -75,8 +75,46 @@ Limites que não bloqueiam esta imagem e ficam para acompanhamento:
 
 - R1. Cada conexão, TLS, leitura e escrita tem teto finito, no máximo 45 s por operação, e o DNS no máximo 5 s. A soma pode passar de 45 s. Não há garantia de prazo total estrito.
 - R2. Erro de rede ao ler o corpo, depois dos cabeçalhos, pode não ser traduzido para a recusa de coleta. A montagem não grava nem ativa essa norma.
-- R3. `tests/test_overlay_httpcore.py::test_bounded_official_resolution_page` acessa a página oficial e não tem a marca `integration`.
+- R3. `tests/test_overlay_httpcore.py::test_bounded_official_resolution_page` acessa a página oficial. Desde a integração 0.2.0 tem a marca `integration`.
 
 A coleta permanece manual, fora do MCP e fora de qualquer agenda. Não criar segredo novo. `LEIS_MCP_API_KEY` continua o segredo que o app já tem. Depois do deploy, `/health` sem chave continua 200, `/mcp` sem chave continua 401, e as quatro ferramentas autenticadas precisam devolver a identidade do Congresso Nacional, o art. 7º, o corte de consolidação e o aviso histórico do Senado, com o upstream ainda consultável. O rollback da imagem é o release anterior do Fly, com `fly releases rollback`; o rollback do overlay é `leis-mcp overlay rollback` e um restart. Não agendar `overlay collect`.
 
 Se o ponteiro estiver ilegível, a versão apontada não existir, o manifesto ou o índice estiverem incompletos, o hash não conferir, faltar `blob` ou proveniência, o total do índice não for numérico, ou o diretório não for o identificador do manifesto, o processo registra o erro e sobe só com o upstream. Isso cobre `OverlayError`, JSON inválido e SQLite ilegível. Um erro do próprio índice upstream não é escondido. Pedido que nomeia o Congresso Nacional, nesse modo, não devolve o homônimo do DF. `/health` continua aberto e `/mcp` continua exigindo o Bearer. O coletor limita cada operação de rede, não o relógio total da coleta. Um desvio no caminho, depois do socket, continua fora desse controle. Hashes conferem integridade do pacote local, não autenticam a origem.
+
+## Índice pronto (integração 0.2.0)
+
+A 0.2.0 do upstream (`mazulo/leis-mcp`, commit `3f275e2`) baixa um `index.sqlite` pronto em vez de clonar e montar. Branch: `feat/parlamentar-020`, sobre o PR 3. O overlay continua separado: o download troca só `<home>/index.sqlite` e nunca escreve em `<home>/overlay`.
+
+- `leis-mcp index` e a primeira subida sem índice usam o índice pronto. `leis-mcp update` baixa o índice novo se o commit mudou, e também quando o índice instalado do mesmo commit não passa na validação. `--from-git` mantém o caminho antigo (clone + montagem local).
+- Fonte: `LEIS_MCP_INDEX_URL`, padrão `https://github.com/mazulo/leis-mcp/releases/download/index`. Só HTTPS, inclusive em cada redirecionamento. É uma fonte de terceiro configurada: o sha256 confere o arquivo contra o manifesto do mesmo publicador, não autentica o publicador.
+- A subida do servidor não espera o índice: o handshake MCP responde na hora e as ferramentas dizem "Preparando o índice" até ele ficar pronto.
+
+Orçamentos (`catalog/snapshot.py`, `Limits`):
+
+| Etapa | Prazo total | Teto |
+|---|---|---|
+| Manifesto | 30 s | 64 KiB |
+| Arquivo `.gz` | 900 s | 512 MiB |
+| Extração + validação | 600 s | 2 GiB extraído |
+
+O prazo de cada etapa é aplicado em toda chamada de socket (conexão, TLS, envio, cabeçalhos e corpo), por um backend do httpcore que reduz o timeout de cada leitura ao que resta do prazo. A inatividade por leitura é de no máximo 60 s, nunca acima do que resta. O SQLite é validado com um progress handler preso ao mesmo prazo. Abaixo de 64 MiB livres, o download para.
+
+Estouro de prazo, de tamanho ou de disco é `SnapshotResourceError` e não aciona o build via git. Manifesto ausente, 404 ou arquivo corrompido ainda caem no git quando ele está instalado. Um 404 no arquivo relê o manifesto uma vez.
+
+Antes de substituir o índice, o arquivo extraído precisa passar por:
+
+- `integrity_check`;
+- só as tabelas `norms`, `meta` e `sqlite_stat*`, sem view, trigger nem tabela virtual;
+- todas as colunas usadas;
+- um índice UNIQUE completo só em `path`, lido em `pragma_index_list`/`pragma_index_info`;
+- `meta.total` igual à contagem, e esta igual a `norms` do manifesto;
+- `meta.commit` igual ao commit do manifesto;
+- nenhuma linha com caminho vazio, absoluto ou com segmento `..`, nem com blob que não tenha 20 bytes;
+- `constituicao.md` presente;
+- não ter menos da metade das normas do índice instalado.
+
+Se qualquer item falha, o índice e o overlay ficam byte a byte como estavam e os temporários são apagados. A troca é `os.replace` depois de `fsync`, sob um lock de arquivo (`index.sqlite.lock`) que serializa downloads concorrentes.
+
+URL assinada de redirecionamento, usuário/senha e query string não entram em mensagem de erro nem no log do `httpx`.
+
+No Fly, o volume já tem o clone e o índice montado por git. O primeiro `update` depois do deploy compara o commit e só baixa se mudou. O processo no ar continua com o índice antigo aberto até reiniciar, como antes.
