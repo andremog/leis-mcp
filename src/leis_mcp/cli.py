@@ -12,7 +12,7 @@ from typing import Any
 from . import messages
 from .catalog import GitRepository, IndexBuilder, IndexSnapshot, PathParser
 from .config import TRANSPORTS, Settings, default_host, default_port
-from .errors import LeisMcpError, SnapshotError
+from .errors import LeisMcpError, SnapshotError, SnapshotResourceError
 from .models import IndexStats
 from .services import LegislationService, ServiceProvider
 
@@ -197,9 +197,14 @@ class Cli:
         return IndexSnapshot(self._settings)
 
     def _prepare_index(self) -> IndexStats:
-        """Downloads the prebuilt index; builds it from git when the download fails and git is installed."""
+        """Downloads the prebuilt index; builds it from git when the snapshot is unavailable and git is installed.
+
+        A budget refusal (time, size, disk) is not answered with a git build, which needs more of the same.
+        """
         try:
             return self._snapshot().download()
+        except SnapshotResourceError:
+            raise
         except SnapshotError as exc:
             if shutil.which("git") is None:
                 raise

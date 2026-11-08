@@ -42,6 +42,11 @@ INDEX_FAILED = "Não consegui preparar o índice: {error} Tento de novo daqui a 
 SNAPSHOT_FAILED = "Falha ao baixar o índice pronto de {url}: {details}"
 SNAPSHOT_CORRUPTED = "O índice baixado está corrompido ({details}). Tente de novo mais tarde."
 SNAPSHOT_WRITE_FAILED = "Não consegui gravar o índice em {path}: {details}"
+SNAPSHOT_TIMEOUT = "O índice pronto não chegou dentro do prazo de {seconds:g} s ({stage}). Tente de novo mais tarde."
+SNAPSHOT_TOO_LARGE = "O índice pronto passou do limite de {limit} bytes ({stage}). Download recusado."
+SNAPSHOT_NO_SPACE = "Espaço livre insuficiente em {path} para o índice pronto (reserva de {reserve} bytes)."
+SNAPSHOT_REFUSED_URL = "Endereço do índice pronto recusado: {url} ({reason})."
+SNAPSHOT_UNUSABLE = "O índice baixado não serve para consulta ({details}). O índice atual foi mantido."
 INDEX_IN_USE = (
     "Não consegui substituir {path}: o arquivo está em uso. Feche os clientes MCP que usam o leis-mcp e tente de novo."
 )

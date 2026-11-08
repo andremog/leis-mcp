@@ -21,6 +21,10 @@ class SnapshotError(LeisMcpError):
     """The prebuilt index could not be downloaded or failed verification."""
 
 
+class SnapshotResourceError(SnapshotError):
+    """A time, size or disk budget refused the snapshot. Never answered by a git build, which would cost more."""
+
+
 class ContentUnavailableError(LeisMcpError):
     pass
 
