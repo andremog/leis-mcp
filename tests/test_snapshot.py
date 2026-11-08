@@ -1036,3 +1036,11 @@ def test_httpx_request_line_is_redacted_even_with_a_raw_quote():
     )  # fmt: skip
     _RedactQuery().filter(record)
     assert record.getMessage() == 'HTTP Request: GET https://h.test/a\'b "HTTP/1.1 200 OK"'
+
+
+@pytest.mark.parametrize("location", ["https://[zz/x", "https://h.test:99999/x", "https://[::1/x"])
+def test_malformed_redirect_target_is_a_snapshot_error(tmp_path, location):
+    transport = httpx.MockTransport(lambda request: httpx.Response(302, headers={"location": location}))
+    snap = IndexSnapshot(Settings(home=tmp_path, index_url=INDEX_URL), httpx.Client(transport=transport))
+    with pytest.raises(SnapshotError):
+        snap.latest()

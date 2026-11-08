@@ -634,7 +634,15 @@ class IndexSnapshot:
                         raise SnapshotError(
                             messages.SNAPSHOT_FAILED.format(url=self._safe(current), details="redirect")
                         )
-                    current = urljoin(current, location)
+                    try:
+                        current = urljoin(current, location)
+                        self._require_https(current)  # parses host and port: malformed values fail here
+                        _ = urlsplit(current).port  # raises ValueError when out of range
+                    except (ValueError, RecursionError) as exc:
+                        reason = "redirect inválido"
+                        raise SnapshotError(
+                            messages.SNAPSHOT_REFUSED_URL.format(url="(URL inválida)", reason=reason)
+                        ) from exc
                     continue
                 if response.status_code == 404 and stage == "arquivo":
                     raise _ArchiveGone()
