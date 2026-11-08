@@ -1,6 +1,6 @@
 [project]
 name = "leis-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Servidor MCP para buscar e citar a legislação brasileira do repositório ctresb/leis"
 readme = "README.md"
 license = "MIT"
@@ -22,6 +22,7 @@ classifiers = [
     "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
+    "httpcore==1.0.9",
     "httpx>=0.28.1",
     "mcp[cli]>=2.3.0",
     "pyyaml>=6.0.3",

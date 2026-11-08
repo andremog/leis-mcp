@@ -30,7 +30,11 @@ class NormPresenter:
     def norm(self, norm: Norm, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         metadata = metadata or {}
         info = {str(field): metadata[field] for field in self._METADATA_FIELDS if metadata.get(field) not in (None, "")}
-        info |= {"caminho": norm.path, "github": f"{self._links_base}/{quote(norm.path)}", "esfera": norm.sphere}
+        info |= {"caminho": norm.path, "esfera": norm.sphere}
+        if norm.path.startswith("parlamentar/"):
+            info["acervo"] = "parlamentar"
+        else:
+            info["github"] = f"{self._links_base}/{quote(norm.path)}"
         if norm.kind:
             info["tipo_diretorio"] = norm.kind
         from_path = self._fields(norm, self._PATH_FIELDS)

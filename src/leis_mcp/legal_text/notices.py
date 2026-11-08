@@ -46,4 +46,26 @@ class NormNotices:
             return None
         return messages.NOT_CONSOLIDATED.format(version=version)
 
-    _CHECKS: tuple[Callable[[dict[str, Any]], str | None], ...] = (_revoked, _status, _version)
+    @staticmethod
+    def _vigencia(metadata: dict[str, Any]) -> str | None:
+        vigencia = str(metadata.get(SourceField.VIGENCIA) or "")
+        return messages.VIGENCIA_UNKNOWN if vigencia == "nao_verificada" else None
+
+    @staticmethod
+    def _cutoff(metadata: dict[str, Any]) -> str | None:
+        version = str(metadata.get(SourceField.TEXT_VERSION) or "")
+        folded = version.casefold()
+        if any(
+            marker in folded
+            for marker in (
+                "consolidado até",
+                "não foi conferid",
+                "nao foi conferid",
+                "notas de alteração",
+                "notas de alteracao",
+            )
+        ):
+            return messages.CONSOLIDATION_CUTOFF.format(version=version)
+        return None
+
+    _CHECKS: tuple[Callable[[dict[str, Any]], str | None], ...] = (_revoked, _status, _version, _vigencia, _cutoff)

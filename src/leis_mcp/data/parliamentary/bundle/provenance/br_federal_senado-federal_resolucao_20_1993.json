@@ -1,0 +1,12 @@
+{
+  "canonical_id": "br:federal:senado-federal:resolucao:20:1993",
+  "source_url": "https://www2.camara.leg.br/legin/fed/ressen/1993/resolucao-20-17-marco-1993-481141-publicacaooriginal-1-pl.html",
+  "fetched_url": "https://www2.camara.leg.br/legin/fed/ressen/1993/resolucao-20-17-marco-1993-481141-publicacaooriginal-1-pl.html",
+  "fetched_at": "2026-11-06T21:34:22Z",
+  "raw_sha256": "ec1ac55c58e401135812763b3928cb8fc2a4c0a1f027c817be1a696e3da2e11c",
+  "body_sha256": "8bc0fa68708ab13265b71bbd420da0585528cceacd331bac10f517f67c9b21a0",
+  "text_nature": "historico",
+  "vigencia": "nao_verificada",
+  "historical_url": "https://legis.senado.leg.br/norma/561878",
+  "notes": "Não é o texto consolidado. Ficha no Senado: https://legis.senado.leg.br/norma/561878"
+}

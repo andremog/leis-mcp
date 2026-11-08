@@ -1,0 +1,189 @@
+{
+  "items": [
+    {
+      "canonical_id": "br:federal:congresso-nacional:resolucao:1:2002",
+      "local_name": "res1-2002",
+      "organ": "congresso-nacional",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "type_label": "Resolução",
+      "number": "1",
+      "year": 2002,
+      "date": "2002-05-08",
+      "title": "Resolução nº 1, de 2002-CN",
+      "summary": "Dispõe sobre a apreciação, pelo Congresso Nacional, das Medidas Provisórias a que se refere o art. 62 da Constituição Federal, e dá outras providências.",
+      "source_url": "https://www2.camara.leg.br/legin/fed/rescon/2002/resolucao-1-8-maio-2002-497942-normaatualizada-pl.html",
+      "historical_url": "https://www2.camara.leg.br/legin/fed/rescon/2002/resolucao-1-8-maio-2002-497942-publicacaooriginal-1-pl.html",
+      "text_nature": "consolidado_pela_fonte",
+      "text_version": "compilada pela fonte oficial (página norma atualizada da Câmara dos Deputados); vigência não verificada de forma independente",
+      "publication": "Promulgação datada de 8 de maio de 2002 no texto. A publicação original não foi indexada como segunda versão.",
+      "aliases": ["resolucao 1/2002-cn", "res 1/2002-cn"],
+      "required": true,
+      "expect": {"min_articles": 20, "contains": ["quadragésimo segundo"]},
+      "notes": "Pilot. Página norma atualizada. A publicação original fica só como URL histórica para não haver duas identidades 1/2002-CN no índice."
+    },
+    {
+      "canonical_id": "br:federal:congresso-nacional:resolucao:1:1970",
+      "local_name": "res1-1970",
+      "organ": "congresso-nacional",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "type_label": "Resolução",
+      "number": "1",
+      "year": 1970,
+      "date": "1970-08-11",
+      "title": "Resolução nº 1, de 1970-CN",
+      "summary": "Aprova o Regimento Comum do Congresso Nacional.",
+      "source_url": "https://www2.camara.leg.br/legin/fed/rescon/1970-1979/resolucao-1-11-agosto-1970-497934-republicacaoatualizada-171822-pl.html",
+      "text_nature": "consolidado_pela_fonte",
+      "text_version": "compilada pela fonte oficial (republicação atualizada; o HTML declara texto consolidado até janeiro de 2023); vigência não verificada de forma independente",
+      "publication": "Ato de 11 de agosto de 1970. Republicação no Diário do Congresso Nacional, suplemento de 09/02/2023, conforme o rodapé da página.",
+      "aliases": ["regimento comum", "regimento comum do congresso nacional", "resolucao 1/1970-cn"],
+      "required": true,
+      "expect": {"min_articles": 80, "contains": ["Art. 104-A", "Revogado pela Constituição Federal de 1988", "janeiro de 2023"]},
+      "notes": "Cobre sessão conjunta, comissões mistas e o prazo de veto no art. 104-A. Não incorpora o PDF do Senado atualizado até julho de 2025."
+    },
+    {
+      "canonical_id": "br:federal:congresso-nacional:resolucao:1:2006",
+      "local_name": "res1-2006",
+      "organ": "congresso-nacional",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "type_label": "Resolução",
+      "number": "1",
+      "year": 2006,
+      "date": "2006-12-22",
+      "title": "Resolução nº 1, de 2006-CN",
+      "summary": "Dispõe sobre a Comissão Mista Permanente a que se refere o § 1º do art. 166 da Constituição, bem como a tramitação das matérias a que se refere o mesmo artigo.",
+      "source_url": "https://www2.camara.leg.br/legin/fed/rescon/2006/resolucao-1-22-dezembro-2006-548706-normaatualizada-pl.html",
+      "text_nature": "consolidado_pela_fonte",
+      "text_version": "compilada pela fonte oficial (página norma atualizada da Câmara dos Deputados); vigência não verificada de forma independente",
+      "publication": "Identificador da Câmara: 22/12/2006. O catálogo da norma aponta DOU de 26/12/2006 e retificação em 28/12/2006; essas datas não foram conferidas no Diário.",
+      "aliases": ["resolucao 1/2006-cn"],
+      "required": true,
+      "expect": {"min_articles": 40, "contains": ["§ 4º-A", "Comissão Mista de Planos, Orçamentos Públicos e Fiscalização"]},
+      "notes": "CMO e tramitação orçamentária. O HTML traz notas de alteração, inclusive de 2025. O catálogo diz 'Não consta revogação expressa'; isso não foi tratado como verificação de vigência."
+    },
+    {
+      "canonical_id": "br:federal:camara-dos-deputados:resolucao:17:1989",
+      "local_name": "ricd",
+      "organ": "camara-dos-deputados",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "type_label": "Resolução",
+      "number": "17",
+      "year": 1989,
+      "date": "1989-09-21",
+      "title": "Resolução nº 17, de 1989",
+      "summary": "Aprova o Regimento Interno da Câmara dos Deputados.",
+      "source_url": "https://www2.camara.leg.br/legin/fed/rescad/1989/resolucaodacamaradosdeputados-17-21-setembro-1989-320110-normaatualizada-pl.html",
+      "text_nature": "consolidado_pela_fonte",
+      "text_version": "compilada pela fonte oficial (página norma atualizada da Câmara dos Deputados; o HTML contém notas de alteração, inclusive da Resolução nº 33, de 2026); vigência não verificada de forma independente",
+      "publication": "Ato de 21 de setembro de 1989. Não foi conferida contra o PDF do portal descrito como atualizado até a Resolução nº 34, de 2026.",
+      "aliases": ["ricd", "regimento interno da camara", "regimento interno da camara dos deputados", "resolucao 17/1989 da camara"],
+      "required": true,
+      "expect": {"min_articles": 100, "contains": ["Palácio do Congresso Nacional"]},
+      "notes": "Texto da resolução que aprova o regimento e o regimento anexo. A numeração reinicia; ler_artigo sem bloco devolve o maior bloco e avisa a duplicidade."
+    },
+    {
+      "canonical_id": "br:federal:camara-dos-deputados:resolucao:25:2001",
+      "local_name": "res25-2001",
+      "organ": "camara-dos-deputados",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "type_label": "Resolução",
+      "number": "25",
+      "year": 2001,
+      "date": "2001-10-10",
+      "title": "Resolução nº 25, de 2001",
+      "summary": "Institui o Código de Ética e Decoro Parlamentar da Câmara dos Deputados.",
+      "source_url": "https://www2.camara.leg.br/legin/fed/rescad/2001/resolucaodacamaradosdeputados-25-10-outubro-2001-320496-normaatualizada-pl.html",
+      "text_nature": "consolidado_pela_fonte",
+      "text_version": "compilada pela fonte oficial (página norma atualizada da Câmara dos Deputados); vigência não verificada de forma independente",
+      "publication": "Ato de 10 de outubro de 2001. Notas de redação posterior (inclusive a Resolução nº 2, de 2011) permanecem no texto.",
+      "aliases": ["codigo de etica da camara", "codigo de etica e decoro parlamentar da camara"],
+      "required": true,
+      "expect": {"min_articles": 8, "contains": ["Código de Ética e Decoro Parlamentar"]},
+      "notes": "A resolução e o código anexo reiniciam a numeração dos artigos."
+    },
+    {
+      "canonical_id": "br:federal:senado-federal:resolucao:20:1993",
+      "local_name": "rsf20-1993",
+      "organ": "senado-federal",
+      "sphere": "federal",
+      "kind": "resolucoes",
+      "type_label": "Resolução",
+      "number": "20",
+      "year": 1993,
+      "date": "1993-03-17",
+      "title": "Resolução nº 20, de 1993",
+      "summary": "Institui o Código de Ética e Decoro Parlamentar.",
+      "source_url": "https://www2.camara.leg.br/legin/fed/ressen/1993/resolucao-20-17-marco-1993-481141-publicacaooriginal-1-pl.html",
+      "historical_url": "https://legis.senado.leg.br/norma/561878",
+      "text_nature": "historico",
+      "text_version": "publicação original (texto histórico, não consolidado)",
+      "publication": "Publicação original. Rodapé da página: Diário do Congresso Nacional, Seção 2, de 18/03/1993. A compilação multivigente do Senado (Sigen) não foi coletada.",
+      "aliases": ["codigo de etica do senado", "codigo de etica e decoro parlamentar do senado", "resolucao 20/1993 do senado"],
+      "required": true,
+      "expect": {"min_articles": 8, "contains": ["No exercício do mandato, o Senador"]},
+      "notes": "Não é o texto consolidado. Ficha no Senado: https://legis.senado.leg.br/norma/561878"
+    }
+  ],
+  "gaps": [
+    {
+      "canonical_id": "br:federal:senado-federal:resolucao:93:1970",
+      "titulo": "Resolução nº 93, de 1970 (Regimento Interno do Senado Federal)",
+      "coletado": false,
+      "motivo": "O texto consolidado oficial desta onda está em PDF, RTF e ePub, não no HTML da Câmara que o normalizador cobre. Não foi convertido.",
+      "urls": [
+        "https://www.congressonacional.leg.br/web/atividade/legislacao/regimento-interno",
+        "https://www2.senado.leg.br/bdsf/handle/id/816709",
+        "https://www25.senado.leg.br/documents/12427/45868/RISFCompilado.pdf/cd5769c8-46c5-4c8a-9af7-99be436b89c4"
+      ]
+    },
+    {
+      "canonical_id": "br:federal:senado-federal:resolucao:40:2001",
+      "titulo": "Resolução do Senado Federal nº 40, de 2001",
+      "coletado": false,
+      "motivo": "Ficha e republicação localizadas; o texto não passou pelo normalizador nesta onda.",
+      "urls": [
+        "https://legis.senado.leg.br/norma/562458",
+        "https://legis.senado.leg.br/norma/562458/publicacao/16433576"
+      ]
+    },
+    {
+      "canonical_id": "br:federal:senado-federal:resolucao:43:2001",
+      "titulo": "Resolução do Senado Federal nº 43, de 2001",
+      "coletado": false,
+      "motivo": "Não coletada. URL do texto estruturado não confirmada por download nesta onda."
+    },
+    {
+      "canonical_id": "br:federal:senado-federal:resolucao:48:2007",
+      "titulo": "Resolução do Senado Federal nº 48, de 2007",
+      "coletado": false,
+      "motivo": "Não coletada. URL do texto estruturado não confirmada por download nesta onda."
+    },
+    {
+      "canonical_id": "br:federal:congresso-nacional:resolucao:1:2011",
+      "titulo": "Resolução nº 1, de 2011-CN (Parlasul)",
+      "coletado": false,
+      "motivo": "Citada na página de regimentos do Congresso Nacional; o HTML da norma não foi coletado nesta onda.",
+      "urls": ["https://www.congressonacional.leg.br/legislacao-e-publicacoes/regimento-do-congresso-nacional"]
+    },
+    {
+      "titulo": "Atos da Mesa, cota, CEAP, gabinete, pessoal, viagens, questões de ordem e súmulas",
+      "coletado": false,
+      "motivo": "Fora da primeira onda. Não há coleta seletiva dessas séries nesta versão."
+    },
+    {
+      "titulo": "LC 95/1998, Lei 1.579/1952 e Lei 1.079/1950",
+      "coletado": false,
+      "motivo": "Não entraram no overlay. São leis federais que o acervo ctresb/leis costuma ter; esta execução não conferiu o índice upstream local."
+    },
+    {
+      "titulo": "Vetos como série própria",
+      "coletado": false,
+      "motivo": "Não há inventário de vetos. O Regimento Comum indexado traz o rito, inclusive o art. 104-A."
+    }
+  ]
+}

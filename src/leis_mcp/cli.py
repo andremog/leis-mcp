@@ -3,16 +3,18 @@
 import argparse
 import json
 import logging
+import shutil
 import sys
 import threading
 from dataclasses import asdict
 from typing import Any
 
 from . import messages
-from .catalog import GitRepository, IndexBuilder, PathParser
+from .catalog import GitRepository, IndexBuilder, IndexSnapshot, PathParser
 from .config import TRANSPORTS, Settings, default_host, default_port
-from .errors import LeisMcpError
-from .services import LegislationService
+from .errors import LeisMcpError, SnapshotError, SnapshotResourceError
+from .models import IndexStats
+from .services import LegislationService, ServiceProvider
 
 log = logging.getLogger(__name__)
 
@@ -48,8 +50,12 @@ class Cli:
         serve.add_argument("--port", type=int, default=default_port(), help="default: $LEIS_MCP_PORT, $PORT or 8000")
         serve.set_defaults(handler=self._serve)
 
-        commands.add_parser("index", help="blobless clone if needed + path index").set_defaults(handler=self._index)
-        commands.add_parser("update", help="git fetch + reindex").set_defaults(handler=self._update)
+        index = commands.add_parser("index", help="download the prebuilt index (git build if unavailable)")
+        index.add_argument("--from-git", action="store_true", help="blobless clone + local build instead")
+        index.set_defaults(handler=self._index)
+        update = commands.add_parser("update", help="download the newest prebuilt index if it changed")
+        update.add_argument("--from-git", action="store_true", help="git fetch + local rebuild instead")
+        update.set_defaults(handler=self._update)
         commands.add_parser("status", help="indexed commit, totals, cache").set_defaults(handler=self._status)
 
         warm = commands.add_parser("warm", help="prefetch norms into the cache (default: aliased laws)")
@@ -68,17 +74,38 @@ class Cli:
         read.add_argument("-s", "--subclause", help="alínea")
         read.add_argument("-b", "--block")
         read.set_defaults(handler=self._read)
+
+        overlay = commands.add_parser("overlay", help="parliamentary corpus (separate from ctresb/leis)")
+        overlay_commands = overlay.add_subparsers(dest="overlay_command", required=True)
+        overlay_commands.add_parser("status", help="active version").set_defaults(handler=self._overlay_status)
+        activate = overlay_commands.add_parser("activate", help="activate the packaged bundle or a directory")
+        activate.add_argument("--from", dest="source", help="bundle directory (default: the packaged snapshot)")
+        activate.set_defaults(handler=self._overlay_activate)
+        overlay_commands.add_parser("rollback", help="restore the previous overlay version").set_defaults(
+            handler=self._overlay_rollback
+        )
+        collect = overlay_commands.add_parser("collect", help="fetch the inventory and write a bundle (not scheduled)")
+        collect.add_argument(
+            "--html-dir", help="read already downloaded HTML named <local_name>.html instead of the network"
+        )
+        collect.add_argument("--into", required=True, help="directory that receives the bundle")
+        collect.add_argument("--activate", action="store_true", help="activate the bundle after writing it")
+        collect.add_argument(
+            "--replace",
+            action="store_true",
+            help="replace an existing parliamentary bundle at --into; other directories are refused",
+        )
+        collect.set_defaults(handler=self._overlay_collect)
         return parser
 
     def _serve(self, args: argparse.Namespace) -> None:
         from .server import LeisServer  # keeps the MCP stack out of the other commands
 
-        if not self._settings.db_path.exists():
-            log.info("Index missing: building it (first run only)...")
-            self._builder().build()
+        services = ServiceProvider(self._settings, self._service, self._prepare_index)
+        services.start()
         if args.transport != "stdio" and self._settings.warm_on_start:
             threading.Thread(target=self._warm_in_background, name="warm", daemon=True).start()
-        LeisServer(self._service()).run(args.transport, args.host, args.port, self._settings.api_key)
+        LeisServer(services).run(args.transport, args.host, args.port, self._settings.api_key)
 
     def _warm_in_background(self) -> None:
         try:  # own service instance: its own SQLite connection and HTTP client
@@ -87,12 +114,30 @@ class Cli:
         except Exception:
             log.exception("Warm-up failed (the server keeps running)")
 
-    def _index(self, _: argparse.Namespace) -> None:
-        self._print(asdict(self._builder().build()))
+    def _index(self, args: argparse.Namespace) -> None:
+        stats = self._builder().build() if args.from_git else self._prepare_index()
+        self._print(asdict(stats))
 
-    def _update(self, _: argparse.Namespace) -> None:
-        self._repository.clone()
-        self._print(asdict(self._builder().build(self._repository.fetch_latest())))
+    def _update(self, args: argparse.Namespace) -> None:
+        if args.from_git:
+            self._repository.clone()
+            self._print(asdict(self._builder().build(self._repository.fetch_latest())))
+            return
+        snapshot = self._snapshot()
+        try:
+            manifest = snapshot.latest()
+            if snapshot.installed_commit() == manifest["commit"]:
+                self._print({"commit": manifest["commit"], "updated": False})
+                return
+            self._print(asdict(snapshot.download(manifest)))
+        except SnapshotResourceError:
+            raise
+        except SnapshotError as exc:  # e.g. the publisher changed its builder: keep the corpus fresh from git
+            if shutil.which("git") is None:
+                raise
+            log.warning("Prebuilt index refused (%s); updating from git instead.", exc)
+            self._repository.clone()
+            self._print(asdict(self._builder().build(self._repository.fetch_latest())))
 
     def _status(self, _: argparse.Namespace) -> None:
         self._print(self._service().status())
@@ -106,11 +151,74 @@ class Cli:
         )
         self._print(provision)
 
+    def _overlay_status(self, _: argparse.Namespace) -> None:
+        from .overlay.store import OverlayStore
+
+        self._print(OverlayStore(self._settings).status())
+
+    def _overlay_activate(self, args: argparse.Namespace) -> None:
+        from pathlib import Path
+
+        from .overlay.store import OverlayStore, package_bundle
+
+        source = Path(args.source) if args.source else package_bundle()
+        active = OverlayStore(self._settings).activate_tree(source, origin="manual" if args.source else "bundle")
+        self._print({"versao": active.version, "origem": active.origin, "normas": len(active.manifest["norms"])})
+
+    def _overlay_rollback(self, _: argparse.Namespace) -> None:
+        from .overlay.store import OverlayStore
+
+        active = OverlayStore(self._settings).rollback()
+        self._print({"versao": active.version, "origem": active.origin})
+
+    def _overlay_collect(self, args: argparse.Namespace) -> None:
+        from pathlib import Path
+
+        from .overlay.assemble import collect_inventory
+        from .overlay.store import collection_protected
+
+        manifest = collect_inventory(
+            html_dir=Path(args.html_dir) if args.html_dir else None,
+            destination=Path(args.into),
+            replace=args.replace,
+            protected=collection_protected(self._settings),
+        )
+        if args.activate:
+            from .overlay.store import OverlayStore
+
+            OverlayStore(self._settings).activate_tree(Path(args.into), origin="collect")
+        self._print(
+            {
+                "versao": manifest["version"],
+                "normas": len(manifest["norms"]),
+                "lacunas": len(manifest["gaps"]),
+                "nao_exaustivo": True,
+            }
+        )
+
     def _service(self) -> LegislationService:
         return LegislationService.from_settings(self._settings, self._repository)
 
     def _builder(self) -> IndexBuilder:
         return IndexBuilder(self._settings, self._repository, PathParser())
+
+    def _snapshot(self) -> IndexSnapshot:
+        return IndexSnapshot(self._settings)
+
+    def _prepare_index(self) -> IndexStats:
+        """Downloads the prebuilt index; builds it from git when the snapshot is unavailable and git is installed.
+
+        A budget refusal (time, size, disk) is not answered with a git build, which needs more of the same.
+        """
+        try:
+            return self._snapshot().download()
+        except SnapshotResourceError:
+            raise
+        except SnapshotError as exc:
+            if shutil.which("git") is None:
+                raise
+            log.warning("Prebuilt index unavailable (%s); building it from git.", exc)
+            return self._builder().build()
 
     @staticmethod
     def _print(payload: dict[str, Any]) -> None:

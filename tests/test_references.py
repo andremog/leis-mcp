@@ -1,5 +1,6 @@
 import pytest
 
+from leis_mcp.models import Reference
 from leis_mcp.references import ReferenceParser
 
 
@@ -76,3 +77,19 @@ def test_alias_table(parser):
     table = parser.alias_table()
     assert table["cdc"] == "leis-ordinarias 8078/1990"
     assert table["adct"] == "constituicao.md#transitorias"
+
+
+def test_congress_resolution_carries_the_organ(parser):
+    reference = parser.parse("Resolução nº 1/2002 do Congresso Nacional")
+    assert (reference.number, reference.years, reference.kind, reference.organ) == (
+        "1",
+        (2002,),
+        "resolucoes",
+        "congresso-nacional",
+    )
+    assert parser.parse("lei federal 8245 de 1991").organ is None
+
+
+def test_extra_alias_does_not_override_a_builtin():
+    parser = ReferenceParser(current_year=2026, extra_aliases={"cdc": Reference(path="parlamentar/nao.md")})
+    assert parser.parse("CDC").number == "8078"

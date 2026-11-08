@@ -38,7 +38,7 @@ class GitRepository:
         staging = self._dir.with_name(f"{self._dir.name}.partial")
         shutil.rmtree(staging, ignore_errors=True)
         self._settings.home.mkdir(parents=True, exist_ok=True)
-        log.info("Cloning %s (blobless)...", self._settings.repo_url)
+        log.info("Cloning %s (blobless)...", _without_credentials(self._settings.repo_url))
         self._run(
             "clone", "--depth", "1", "--filter=blob:none", "--sparse", "--branch", self._settings.branch,
             self._settings.repo_url, str(staging),
@@ -118,3 +118,15 @@ class GitRepository:
         for chunk in iter(partial(stream.read, cls._READ_CHUNK), b""):
             *records, pending = (pending + chunk).split(b"\0")
             yield from records
+
+
+def _without_credentials(url: str) -> str:
+    """Repository URL for logs: user info (a token in `https://user:token@host/...`) is dropped."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    if not parts.username and not parts.password:
+        return url
+    host = parts.hostname or ""
+    netloc = f"{host}:{parts.port}" if parts.port else host
+    return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
