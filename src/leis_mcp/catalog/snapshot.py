@@ -65,33 +65,68 @@ def scrub_urls(text: str) -> str:
     return _TOKEN.sub(_scrub_token, text)
 
 
+_PIECE = re.compile(r"\S+")
+
+
 def _scrub_token(match: re.Match) -> str:
     token = match.group(0)
-    quote = token[0] if token[0] in "'\"" else ""
-    inner = token[1:-1] if quote else token
-    scheme = inner.find("://")
-    if scheme < 0 and not inner.startswith("/"):
-        return token
-    after_scheme = scheme + 3 if scheme >= 0 else 0
-    cuts = [index for index in (inner.find("?", after_scheme), inner.find("#", after_scheme)) if index >= 0]
+    if token[0] not in "'\"":
+        return _scrub_piece(token)[0]
+    # Inside quotes, every piece is checked; after the first URL with a query, the rest of the quoted value
+    # is dropped too, since a raw Location value can carry spaces inside its query.
+    inner, out, position = token[1:-1], [], 0
+    for piece in _PIECE.finditer(inner):
+        out.append(inner[position : piece.start()])
+        scrubbed, cut = _scrub_piece(piece.group(0))
+        out.append(scrubbed)
+        position = piece.end()
+        if cut:
+            break
+    else:
+        out.append(inner[position:])
+    return f"{token[0]}{''.join(out)}{token[0]}"
+
+
+def _scrub_piece(piece: str) -> tuple[str, bool]:
+    """`piece` without query, fragment and user info when it is a URL or `/path`; and whether a query was cut."""
+    scheme = piece.find("://")
+    if piece.startswith("//"):  # scheme-relative: //user:pass@host/path
+        scheme = -1
+    looks_like_query = "?" in piece and "=" in piece[piece.find("?") :]
+    if scheme < 0 and not piece.startswith("/") and not looks_like_query:
+        return piece, False
+    if scheme < 0 and not piece.startswith("/"):  # arc2?token=…, ?token=…, key=/rel?token=…
+        return piece[: piece.find("?")], True
+    after_scheme = scheme + 3 if scheme >= 0 else (2 if piece.startswith("//") else 0)
+    cuts = [index for index in (piece.find("?", after_scheme), piece.find("#", after_scheme)) if index >= 0]
     if cuts:
-        inner = inner[: min(cuts)]
-    if scheme >= 0:
-        slash = inner.find("/", after_scheme)
-        end = slash if slash >= 0 else len(inner)
-        authority = inner[after_scheme:end]
+        piece = piece[: min(cuts)]
+    if scheme >= 0 or piece.startswith("//"):
+        slash = piece.find("/", after_scheme)
+        end = slash if slash >= 0 else len(piece)
+        authority = piece[after_scheme:end]
         if "@" in authority:
-            inner = inner[:after_scheme] + authority.rsplit("@", 1)[1] + inner[end:]
-    return f"{quote}{inner}{quote}"
+            piece = piece[:after_scheme] + authority.rsplit("@", 1)[1] + piece[end:]
+    return piece, bool(cuts)
 
 
 class _RedactQuery(logging.Filter):
     """httpx logs request URLs at INFO and httpcore logs response headers (Location) at DEBUG; signed
     release-asset URLs carry tokens in the query string."""
 
+    _HEADER_EVENTS = ("receive_response_headers", "send_request_headers")
+
     def filter(self, record: logging.LogRecord) -> bool:
+        # At the source first: the URL argument of httpx's "HTTP Request" line, and httpcore's header lines.
+        if record.name == "httpx" and isinstance(record.args, tuple) and len(record.args) >= 2:
+            args = list(record.args)
+            args[1] = IndexSnapshot._safe(str(args[1]))
+            record.args = tuple(args)
         message = record.getMessage()
-        scrubbed = scrub_urls(message)
+        if record.name.startswith("httpcore") and message.startswith(self._HEADER_EVENTS):
+            record.msg, record.args = message.split(" ", 1)[0] + " (headers omitted)", None
+            return True
+        scrubbed = scrub_urls(message)  # second layer, for anything else that carries a URL
         if scrubbed != message:
             record.msg, record.args = scrubbed, None
         return True
@@ -625,7 +660,7 @@ class IndexSnapshot:
                 return
             except httpx.TimeoutException as exc:
                 raise SnapshotResourceError(deadline.message()) from exc
-            except (httpx.HTTPError, httpx.InvalidURL, ValueError, RecursionError) as exc:
+            except httpx.HTTPError as exc:  # build_request already turned malformed URLs into SnapshotError
                 details = type(exc).__name__  # httpx messages can carry the signed URL
                 raise SnapshotError(messages.SNAPSHOT_FAILED.format(url=self._safe(current), details=details)) from exc
             finally:

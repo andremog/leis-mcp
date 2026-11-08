@@ -795,7 +795,7 @@ def test_debug_logs_of_httpcore_omit_signed_location(tmp_path, caplog, no_proxy)
     snap, *_ = real_stack(tmp_path, [], Limits(), network=network)
     with caplog.at_level("DEBUG"), pytest.raises(SnapshotError):
         snap.latest()
-    assert "Location" in caplog.text or "location" in caplog.text
+    assert "receive_response_headers.complete (headers omitted)" in caplog.text
     assert "SECRET" not in caplog.text and "TOKEN" not in caplog.text
 
 
@@ -904,6 +904,12 @@ def test_update_never_falls_back_to_git_after_a_budget_refusal(tmp_path, monkeyp
         "HTTPS://user:SECRET@host/p",
         "GET https://cdn.test/a?X-Amz-Signature=SECRET&x=1",
         "(b'Location', b'/rel/arc2?x=a SECRET')",
+        "'see https://a.test/x and https://user:SECRET@b.test/y'",
+        '"GET /index.json?sig=SECRET HTTP/1.1"',
+        "Location: arc2?token=SECRET",
+        "Location: ?token=SECRET",
+        "Location: //user:SECRET@host/p",
+        "key=/rel?token=SECRET",
     ],
 )
 def test_url_scrubbing(line):
@@ -983,3 +989,50 @@ def test_blob_typed_path_is_refused(tmp_path):
     with pytest.raises(SnapshotError):
         snap.download()
     assert_previous_kept(settings, previous)
+
+
+def test_url_scrubbing_truncates_very_long_lines():
+    from leis_mcp.catalog.snapshot import scrub_urls
+
+    scrubbed = scrub_urls("x" * 40_000)
+    assert len(scrubbed) <= 16 * 1024 + 1 and scrubbed.endswith("…")
+
+
+def test_failed_repair_names_the_unreadable_download(tmp_path):
+    settings = Settings(home=tmp_path)
+    settings.db_path.write_bytes(b"not sqlite")
+
+    def factory():
+        raise sqlite3.DatabaseError("file is not a database")
+
+    provider = ServiceProvider(settings, factory=factory, prepare=lambda: None)
+    with pytest.raises(IndexPreparingError):
+        provider.get()
+    provider._worker.join(5)
+    with pytest.raises(IndexPreparingError, match="continua ilegível"):
+        provider.get()
+
+
+def test_logs_are_redacted_at_the_source(tmp_path, caplog, no_proxy):
+    redirect = b"HTTP/1.1 302 Found\r\nLocation: arc2?token=SECRET\r\nContent-Length: 0\r\n\r\n"
+    clock = Clock()
+    network = FakeNetwork(clock, [[(0, redirect)], [(0, response_bytes(b"{}"))]])
+    snap, *_ = real_stack(tmp_path, [], Limits(), network=network)
+    snap._settings = Settings(home=tmp_path, index_url="https://example.test/ind'ex?sig=SECRET2")
+    with caplog.at_level("DEBUG"), pytest.raises(SnapshotError):
+        snap.latest()
+    assert "receive_response_headers.complete (headers omitted)" in caplog.text
+    assert "SECRET" not in caplog.text
+
+
+def test_httpx_request_line_is_redacted_even_with_a_raw_quote():
+    import logging
+
+    from leis_mcp.catalog.snapshot import _RedactQuery
+
+    record = logging.LogRecord(
+        "httpx", logging.INFO, __file__, 1, 'HTTP Request: %s %s "%s %d %s"',
+        ("GET", "https://h.test/a'b?sig=SECRET", "HTTP/1.1", 200, "OK"), None,
+    )  # fmt: skip
+    _RedactQuery().filter(record)
+    assert record.getMessage() == 'HTTP Request: GET https://h.test/a\'b "HTTP/1.1 200 OK"'
