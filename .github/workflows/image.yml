@@ -1,0 +1,33 @@
+name: Image
+
+# Temporary: builds the production image from this branch's Dockerfile and keeps it as a private run artifact,
+# for a deploy from an environment that cannot reach Fly's remote builders. Nothing is pushed anywhere.
+
+on:
+  push:
+    branches: ["ci/image-*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          tag="rev-${GITHUB_SHA::7}"
+          docker build -t "leis-mcp:$tag" .
+          docker run --rm --entrypoint leis-mcp "leis-mcp:$tag" --help | head -5
+          docker save "leis-mcp:$tag" | gzip -1 > image.tar.gz
+          sha256sum image.tar.gz | tee image.sha256
+          git log -1 --format='%H %s' | tee commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image
+          path: |
+            image.tar.gz
+            image.sha256
+            commit.txt
+          retention-days: 2
