@@ -15,9 +15,11 @@ from ..errors import ProvisionNotFoundError, QueryError
 from ..legal_text.extractor import ProvisionExtractor
 from ..models import LoadedNorm, Norm, NormQuery, Occurrence, SearchMatch, SourceField
 from ..online import OnlineValidity
+from ..online.planalto import PlanaltoText
 from ..overlay.catalog import CompositeIndex, attach
 from ..references.parser import ReferenceParser
 from ..search.text_search import TextSearch
+from .correction import CorpusCorrector
 from .loader import NormLoader
 from .presenter import NormPresenter
 from .resolver import NormResolver
@@ -48,6 +50,7 @@ class LegislationService:
         search: TextSearch,
         data_dir: Path,
         online: OnlineValidity,
+        corrector: CorpusCorrector | None = None,
     ):
         self._index = index
         self._references = references
@@ -58,6 +61,7 @@ class LegislationService:
         self._search = search
         self._data_dir = data_dir
         self._online = online
+        self._corrector = corrector
 
     @classmethod
     def from_settings(cls, settings: Settings, repository: GitRepository | None = None) -> Self:
@@ -73,6 +77,7 @@ class LegislationService:
             TextSearch(),
             settings.home,
             online,
+            CorpusCorrector(PlanaltoText(settings)),
         )
 
     def find_norms(
@@ -114,6 +119,8 @@ class LegislationService:
     ) -> dict[str, Any]:
         target, reference = self._resolver.resolve(norm)
         loaded = self._loader.load(target)
+        if self._corrector is not None:
+            return self._corrector.read(self, loaded, article, paragraph, clause, subclause, block or reference.block)
         if not loaded.document.blocks:
             source = loaded.metadata.get(SourceField.SOURCE_URL)
             raise QueryError(messages.NO_ARTICLES.format(path=target.path, source=source))

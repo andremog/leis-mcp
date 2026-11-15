@@ -4,7 +4,7 @@ import bisect
 from dataclasses import dataclass, field
 from enum import IntEnum
 from itertools import chain
-from typing import Self
+from typing import Any, Self
 
 from .text import TextNormalizer
 
@@ -89,9 +89,23 @@ class Block:
 
 
 class LegalDocument:
-    def __init__(self, lines: list[str], blocks: list[Block]):
+    def __init__(
+        self,
+        lines: list[str],
+        blocks: list[Block],
+        *,
+        quoted_fallback: bool = False,
+        promulgated_numbers: tuple[str, ...] = (),
+        insertions: tuple[Any, ...] = (),
+    ):
         self.lines = lines
         self.blocks = blocks
+        # True when every article heading was quoted (promulgation of vetoed parts, not the full norm).
+        self.quoted_fallback = quoted_fallback
+        # Law numbers named in "parte(s) vetada(s) da Lei nº N", digits only.
+        self.promulgated_numbers = promulgated_numbers
+        # Quoted (NR)/(AC) or colon-introduced articles that belong to another law.
+        self.insertions = insertions
         articles = chain.from_iterable(block.articles.values() for block in blocks)
         self._ordered = sorted(articles, key=lambda article: article.start)
         self._starts = [article.start for article in self._ordered]

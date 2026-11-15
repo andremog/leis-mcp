@@ -1,8 +1,8 @@
 """Outbound limits for the vigência lookup.
 
-Requests go only to normas.leg.br and legis.senado.leg.br, over HTTPS, to a public address resolved
-for that name. Redirects are not followed. The body and the clock are capped. The API key is never
-attached, and a URN or number that is not a plain official identifier is not sent.
+Requests go only to normas.leg.br, legis.senado.leg.br and planalto.gov.br, over HTTPS, to a public
+address resolved for that name. Redirects are not followed. The body and the clock are capped. The API
+key is never attached, and a URN or number that is not a plain official identifier is not sent.
 """
 
 import ipaddress
@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 import httpcore
 import httpx
 
-ALLOWED_HOSTS = frozenset({"normas.leg.br", "legis.senado.leg.br"})
+ALLOWED_HOSTS = frozenset({"normas.leg.br", "legis.senado.leg.br", "www.planalto.gov.br", "planalto.gov.br"})
 MAX_BODY = 4 * 1024 * 1024
 CONNECT_TIMEOUT = 5.0
 READ_TIMEOUT = 10.0
@@ -57,8 +57,8 @@ def refuse_unofficial(url: httpx.URL | str) -> None:
         raise httpx.InvalidURL("unofficial url")
 
 
-def read_json(client: httpx.Client, url: str, params: dict[str, str] | None = None) -> Any:
-    """GET JSON from an official URL. `None` on 404. Redirects and oversized bodies are errors."""
+def read_body(client: httpx.Client, url: str, params: dict[str, str] | None = None) -> bytes | None:
+    """GET an official URL. `None` on 404. Redirects and oversized bodies are errors."""
     built = httpx.URL(url)
     if params:
         built = built.copy_merge_params(params)
@@ -77,10 +77,16 @@ def read_json(client: httpx.Client, url: str, params: dict[str, str] | None = No
             buffer.extend(chunk)
             if len(buffer) > MAX_BODY:
                 raise httpx.RemoteProtocolError("response too large")
-    return json.loads(bytes(buffer))
+    return bytes(buffer)
 
 
-def official_client(user_agent: str) -> httpx.Client:
+def read_json(client: httpx.Client, url: str, params: dict[str, str] | None = None) -> Any:
+    """GET JSON from an official URL. `None` on 404. Redirects and oversized bodies are errors."""
+    body = read_body(client, url, params)
+    return None if body is None else json.loads(body)
+
+
+def official_client(user_agent: str, accept: str = "application/json") -> httpx.Client:
     """Client that does not follow redirects, ignores proxy env, and connects only to a vetted address."""
     ssl_context = httpx.create_ssl_context(trust_env=True)
     transport = httpx.HTTPTransport(verify=ssl_context, retries=0, trust_env=False)
@@ -89,13 +95,20 @@ def official_client(user_agent: str) -> httpx.Client:
     if not isinstance(inner, httpcore.NetworkBackend):
         raise RuntimeError("online transport has no network backend")
     pool._network_backend = OfficialBackend(inner)
-    return httpx.Client(
+    client = httpx.Client(
         transport=transport,
         timeout=httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT, write=CONNECT_TIMEOUT, pool=CONNECT_TIMEOUT),
         follow_redirects=False,
         trust_env=False,
-        headers={"User-Agent": user_agent, "Accept": "application/json"},
+        headers={"User-Agent": user_agent, "Accept": accept},
     )
+    client.event_hooks["request"].append(_drop_credentials)
+    return client
+
+
+def _drop_credentials(request: httpx.Request) -> None:
+    for name in _CREDENTIAL_HEADERS:
+        request.headers.pop(name, None)
 
 
 class OfficialBackend:

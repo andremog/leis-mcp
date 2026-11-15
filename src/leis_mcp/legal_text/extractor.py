@@ -29,12 +29,15 @@ class ProvisionExtractor:
         text = self._document.text(span.start, span.end)
         head = self._document.text(selected.start, selected.head_end) if requested else None
         status = ProvisionNotices.status(text)
+        provision_notices = (*notices, *ProvisionNotices.for_text(text, status))
+        if self._document.quoted_fallback:
+            provision_notices = (messages.VETO_PROMULGATION_ONLY, *provision_notices)
         return Excerpt(
             citation=Citation.format(key, requested),
             text=text,
             head=head if head != text else None,
             block_title=self._document.block_title(selected),
-            notices=(*notices, *ProvisionNotices.for_text(text, status)),
+            notices=provision_notices,
             article=key,
             units=tuple((int(level), unit) for level, unit in requested.items()),
             status=status,
@@ -63,7 +66,7 @@ class ProvisionExtractor:
     def _select(self, key: str, selector: str | int | None) -> tuple[Article, list[str]]:
         candidates = [block for block in self._document.blocks if key in block.articles]
         if not candidates:
-            raise ProvisionNotFoundError(messages.ARTICLE_NOT_FOUND.format(article=key), self._neighbours(key))
+            raise self._missing(messages.ARTICLE_NOT_FOUND.format(article=key), self._neighbours(key))
         chosen = self._choose_block(key, candidates, selector)
         others = [block for block in candidates if block is not chosen]
         notices = [self._duplicate_notice(key, chosen, others)] if others else []
@@ -75,7 +78,7 @@ class ProvisionExtractor:
             return next((block for block in candidates if block is main), candidates[0])
         matching = [block for block in candidates if block.matches(selector)]
         if not matching:
-            raise ProvisionNotFoundError(
+            raise self._missing(
                 messages.ARTICLE_NOT_IN_BLOCK.format(article=key, block=selector),
                 [messages.BLOCK_OPTION.format(index=block.index, title=block.title) for block in candidates],
             )
@@ -95,6 +98,11 @@ class ProvisionExtractor:
         closest = set(sorted(keys, key=lambda k: abs(ArticleLabel.number_of(k) - target))[: self._NEIGHBOURS])
         return [messages.ARTICLE_SUGGESTION.format(article=k) for k in keys if k in closest]
 
+    def _missing(self, message: str, suggestions: list[str] | None = None) -> ProvisionNotFoundError:
+        if self._document.quoted_fallback:
+            message = f"{message} {messages.VETO_PROMULGATION_ONLY}"
+        return ProvisionNotFoundError(message, suggestions)
+
     def _unit_not_found(
         self, article: Article, level: Level, key: str, span: Span, paragraph: str | None
     ) -> ProvisionNotFoundError:
@@ -103,10 +111,10 @@ class ProvisionExtractor:
             Level.CLAUSE: lambda: self._clause_not_found(article, key, span, paragraph),
             Level.SUBCLAUSE: lambda: self._subclause_not_found(article, key, span),
         }
-        return builders[level]()
+        error = builders[level]()
+        return self._missing(error.message, error.suggestions)
 
-    @staticmethod
-    def _paragraph_not_found(article: Article, key: str, span: Span) -> ProvisionNotFoundError:
+    def _paragraph_not_found(self, article: Article, key: str, span: Span) -> ProvisionNotFoundError:
         return ProvisionNotFoundError(
             messages.PARAGRAPH_NOT_FOUND.format(paragraph=ParagraphLabel.display(key), article=article.key),
             [ParagraphLabel.display(existing) for existing in span.keys(Level.PARAGRAPH)],
