@@ -18,7 +18,7 @@ from ..legal_text.insertions import Insertion, digits
 from ..legal_text.insertions import display_number as show_number
 from ..legal_text.labels import ArticleLabel, Label
 from ..models import LoadedNorm, SourceField
-from ..online.planalto import OfficialPage, PlanaltoText, PlanaltoUnavailable
+from ..online.planalto import OfficialPage, PlanaltoText, PlanaltoUnavailable, conflicting_label
 
 log = logging.getLogger(__name__)
 
@@ -156,6 +156,8 @@ class CorpusCorrector:
         if not self._planalto.accepted(loaded.norm, page):
             return None
         document = DocumentParser().parse(page.body)
+        if conflicting_label(document, article, paragraph, clause):
+            raise QueryError(messages.PLANALT_AMBIGUOUS.format(article=Label.ordinal(key)))
         try:
             excerpt = ProvisionExtractor(document).extract(article, paragraph, clause, subclause)
         except ProvisionNotFoundError:
@@ -193,10 +195,11 @@ class CorpusCorrector:
             return None
         if not self._planalto.accepted(loaded.norm, page):
             return None
+        document = DocumentParser().parse(page.body)
+        if conflicting_label(document, article, paragraph, clause):
+            return None
         try:
-            excerpt = ProvisionExtractor(DocumentParser().parse(page.body)).extract(
-                article, paragraph, clause, subclause
-            )
+            excerpt = ProvisionExtractor(document).extract(article, paragraph, clause, subclause)
         except ProvisionNotFoundError:
             return None
         if excerpt.text.strip() == str(local["dispositivo"]["texto"]).strip():

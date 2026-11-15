@@ -78,6 +78,10 @@ PLANALT_OFFLINE = (
     "e o arquivo está incompleto."
 )
 PLANALT_UNAVAILABLE = "Não foi possível obter o texto no Planalto ({reason}). O acervo local está incompleto."
+PLANALT_AMBIGUOUS = (
+    "O Planalto traz dois rótulos vigentes para o mesmo dispositivo do art. {article}. "
+    "Nada foi devolvido para não escolher entre eles."
+)
 PREAMBLE_REJECTED = (
     "O preâmbulo não atribui estas partes vetadas à Lei nº {number} de forma única. "
     "Nada foi devolvido para não apresentar o artigo errado."

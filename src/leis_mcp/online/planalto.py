@@ -11,15 +11,19 @@ import logging
 import os
 import re
 import tempfile
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from pathlib import Path
 
 import httpx
 
 from ..config import Settings
+from ..document import LegalDocument, Level
 from ..legal_text import DocumentParser
 from ..legal_text.insertions import digits
+from ..legal_text.labels import ArticleLabel, ClauseLabel, ParagraphLabel
 from ..models import Norm
 from .transport import official_client, read_body
 
@@ -76,8 +80,68 @@ def decode_page(payload: bytes) -> str:
         return payload.decode("cp1252")
 
 
+class _DropStruck(HTMLParser):
+    """Emits the page again with struck subtrees removed, including nested spans."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._stack: list[bool] = []
+        self._depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._open(tag, attrs, close=False)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._open(tag, attrs, close=True)
+
+    def _open(self, tag: str, attrs: list[tuple[str, str | None]], *, close: bool) -> None:
+        struck = _is_struck(tag, attrs)
+        if not close:
+            self._stack.append(struck)
+        if struck or self._depth:
+            if struck and not close:
+                self._depth += 1
+            return
+        rendered = "".join(
+            f" {name}" if value is None else f' {name}="{html.escape(value, quote=True)}"' for name, value in attrs
+        )
+        self._parts.append(f"<{tag}{rendered}{' /' if close else ''}>")
+
+    def handle_endtag(self, tag: str) -> None:
+        struck = self._stack.pop() if self._stack else False
+        if struck:
+            self._depth = max(0, self._depth - 1)
+            return
+        if self._depth:
+            return
+        self._parts.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        if not self._depth:
+            self._parts.append(data)
+
+    def result(self) -> str:
+        return "".join(self._parts)
+
+
+def _is_struck(tag: str, attrs: list[tuple[str, str | None]]) -> bool:
+    if tag.lower() in {"s", "strike", "del"}:
+        return True
+    style = next((value or "" for name, value in attrs if name.lower() == "style"), "")
+    return "line-through" in style.replace(" ", "").lower()
+
+
+def drop_struck(page: str) -> str:
+    parser = _DropStruck()
+    parser.feed(page)
+    parser.close()
+    return parser.result()
+
+
 def html_to_body(page: str) -> str:
-    text = _SCRIPT.sub(" ", page)
+    text = drop_struck(page)
+    text = _SCRIPT.sub(" ", text)
     text = _BREAK.sub("\n", text)
     text = html.unescape(_TAG.sub("", text))
     text = _HEADING.sub("\n", text)
@@ -98,6 +162,28 @@ def _join_split_labels(text: str) -> str:
         joined.append(lines[index])
         index += 1
     return "\n".join(joined)
+
+
+def conflicting_label(
+    document: LegalDocument, article: str, paragraph: str | None = None, clause: str | None = None
+) -> bool:
+    """True when the requested device still has two in-force labels after struck text was dropped."""
+    key = ArticleLabel.parse(article)
+    found = [item for block in document.blocks for item in block.articles.values() if item.key == key]
+    if len(found) != 1:
+        return len(found) > 1
+    units = found[0].units
+
+    def repeated(level: Level) -> set[str]:
+        keys = [unit.key for unit in units if unit.level == level]
+        return {item for item, count in Counter(keys).items() if count > 1}
+
+    paragraphs, clauses = repeated(Level.PARAGRAPH), repeated(Level.CLAUSE)
+    if paragraph not in (None, ""):
+        return ParagraphLabel.parse(paragraph) in paragraphs
+    if clause not in (None, ""):
+        return ClauseLabel.parse(clause) in clauses
+    return bool(paragraphs or clauses)
 
 
 def names_law(body: str, number: str) -> bool:

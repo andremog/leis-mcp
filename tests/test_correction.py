@@ -2,7 +2,9 @@
 
 import json
 import logging
+import re
 import shutil
+from pathlib import Path
 
 import httpx
 import pytest
@@ -326,6 +328,64 @@ def test_a_citation_of_the_expected_law_does_not_make_the_page_that_law():
     )
     assert names_law(body, "9999")
     assert not names_law(body, "14133")
+
+
+FIXTURE = Path(__file__).parent / "fixtures" / "planalto-lei-14133-vetos.html"
+IN_FORCE = {
+    ("37", "2"): "Ressalvados os casos de inexigibilidade",
+    ("54", "1"): "Sem prejuízo do disposto no",
+    ("115", "4"): "Nas contratações de obras e serviços de engenharia",
+    ("175", "2"): "Até 31 de dezembro de 2023, os Municípios",
+}
+
+
+def test_recorded_planalto_paragraphs_drop_the_struck_veto(tmp_path):
+    page = FIXTURE.read_text(encoding="utf-8")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=page)
+
+    loaded = _load(VETO_14133, _norm("14133", 2021))
+    corrector = _corrector(tmp_path, handler)
+    for (article, paragraph), needle in IN_FORCE.items():
+        result = corrector.read(_Service({}), loaded, article, paragraph, None, None, None)
+        flat = re.sub(r"\s+", " ", result["dispositivo"]["texto"])
+        assert needle in flat
+        assert "(VETADO)" not in flat
+        assert result["avisos"][0].startswith("texto obtido do Planalto em ")
+
+
+def test_two_in_force_labels_fail_closed(tmp_path):
+    page = """<html><body>
+    <p>LEI Nº 14.133, DE 1º DE ABRIL DE 2021</p>
+    <p>Art. 37. Caput.</p>
+    <p>§ 2º (VETADO).</p>
+    <p>§ 2º Ressalvados os casos de inexigibilidade.</p>
+    </body></html>"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=page)
+
+    loaded = _load(VETO_14133, _norm("14133", 2021))
+    with pytest.raises(QueryError, match="dois rótulos vigentes") as error:
+        _corrector(tmp_path, handler).read(_Service({}), loaded, "37", "2", None, None, None)
+    assert "(VETADO)" not in str(error.value)
+    assert "Ressalvados" not in str(error.value)
+
+
+def test_nested_strike_and_windows_1252_keep_only_the_promulgated_paragraph():
+    snippet = (
+        "<html><body><p>LEI Nº 14.133, DE 1º DE ABRIL DE 2021</p><p>Art. 37. Caput.</p>"
+        '<span style="text-decoration: line-through"><span><del>§ 2º (VETADO).</del></span></span>'
+        "<p>§ 2º Ressalvados os casos de inexigibilidade.</p></body></html>"
+    )
+    body = html_to_body(decode_page(snippet.encode("cp1252")))
+    text = DocumentParser().parse(body)
+    from leis_mcp.legal_text import ProvisionExtractor
+
+    found = re.sub(r"\s+", " ", ProvisionExtractor(text).extract("37", paragraph="2").text)
+    assert found.startswith("§ 2º Ressalvados os casos de inexigibilidade.")
+    assert "(VETADO)" not in found
 
 
 def test_html_fixture_keeps_the_official_article_sentence():
