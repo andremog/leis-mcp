@@ -180,3 +180,7 @@ Só então, e nesta ordem:
 O rollback de imagem, se um 0.2.0 futuro precisar voltar, continua sendo `rev-486b4e0`. A implantação v1 histórica é `deployment-01M6FDPBYGQHASSJZHERXNQ1KG`.
 
 A preservação do overlay numa reindexação ao vivo do upstream, e o restante do inventário, continuam pendentes.
+
+## Status em 15 de novembro de 2026
+
+O dono aprovou integrar o upstream mazulo/leis-mcp v0.3.0 (vigência e redação, consulta a normas.leg.br e ao Senado) neste fork, preservando a autenticação Bearer, o `/health`, o Fly e o acervo parlamentar. Esta nota não publica, não faz deploy e não altera segredo. A consulta online nova sai só para esses dois hosts oficiais, com prazo e limite de corpo; `LEIS_MCP_OFFLINE=1` desliga. As normas do overlay não têm URN, então a leitura delas não dispara essa consulta. O campo `vigencia` das ferramentas passa a ser o objeto da 0.3.0; o valor `nao_verificada` do overlay continua em `vigencia.campos.vigencia` e no aviso de vigência não verificada.

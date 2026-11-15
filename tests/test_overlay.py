@@ -134,18 +134,34 @@ def test_cn_resolution_is_not_the_df_homonym(service):
 def test_art7_paragraph_search_and_list(service):
     article = service.read_provision("resolucao 1/2002-cn", "7")
     assert ART_7 in article["dispositivo"]["texto"]
+    for number in range(1, 8):
+        assert f"§ {number}º" in article["dispositivo"]["texto"]
+    assert "Art. 8º" not in article["dispositivo"]["texto"]
     assert article["fonte"].startswith("https://www2.camara.leg.br/legin/")
+    assert article["norma"]["acervo"] == "parlamentar"
+    assert article["norma"]["vigencia"] == "nao_verificada"
+    assert article["vigencia"]["campos"]["vigencia"] == "nao_verificada"
+    assert article["vigencia"]["estado"] == "nao_informada"
+    assert article["redacao"]["compilada"] is True
+    assert article["vigencia_online"]["disponivel"] is False
     assert any("Vigência não verificada" in notice for notice in article["avisos"])
     paragraph = service.read_provision("Resolução nº 1/2002 do Congresso Nacional", "7", paragraph="1")
     assert "autógrafos" in paragraph["dispositivo"]["texto"]
 
+    found = service.find_norms("Resolução nº 1/2002 do Congresso Nacional")["resultados"][0]
+    assert found["vigencia"]["campos"]["vigencia"] == "nao_verificada"
+    assert found["redacao"]["versao_texto"]
+    assert found["acervo"] == "parlamentar"
+
     page = service.browse(sphere="federal", kind="resolucoes", year=2002, agency="Congresso Nacional")
     assert page["total"] == 1
     assert page["normas"][0]["caminho"].startswith("parlamentar/federal/congresso-nacional/")
+    assert page["normas"][0]["vigencia"] == "nao_informada"
 
     matches = service.search_text("quadragésimo segundo", norm="resolucao 1/2002-cn")
     assert matches["total_ocorrencias"] >= 1
     assert matches["resultados"][0]["ocorrencias"][0]["artigo"] == "7º"
+    assert matches["resultados"][0]["norma"]["vigencia"]["estado"] == "nao_informada"
 
 
 def test_core_norms_keep_lettered_articles_revocation_and_historical_status(service):

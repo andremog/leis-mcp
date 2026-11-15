@@ -28,12 +28,16 @@ class ProvisionExtractor:
         span = self._narrow(selected, requested)
         text = self._document.text(span.start, span.end)
         head = self._document.text(selected.start, selected.head_end) if requested else None
+        status = ProvisionNotices.status(text)
         return Excerpt(
             citation=Citation.format(key, requested),
             text=text,
             head=head if head != text else None,
             block_title=self._document.block_title(selected),
-            notices=(*notices, *ProvisionNotices.for_text(text)),
+            notices=(*notices, *ProvisionNotices.for_text(text, status)),
+            article=key,
+            units=tuple((int(level), unit) for level, unit in requested.items()),
+            status=status,
         )
 
     @staticmethod

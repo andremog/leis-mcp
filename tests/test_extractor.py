@@ -66,7 +66,9 @@ def test_clause_only_in_paragraph_points_to_it(extractor):
 
 
 def test_notices(extractor):
-    assert any("revogação" in notice for notice in extractor.extract("11").notices)
+    repealed = extractor.extract("11")
+    assert repealed.status.revoked and repealed.status.note == "Revogado pela Lei nº 1, de 2/1/2004"
+    assert any("REVOGADO" in notice for notice in repealed.notices)
     assert any("tachado" in notice for notice in extractor.extract("12").notices)
     assert extractor.extract("1").notices == ()
 

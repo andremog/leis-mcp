@@ -76,7 +76,9 @@ def test_mcp_tools_return_cn_identity_and_reject_contradictory_organ(tmp_path):
     top = found.structured_content["resultados"][0]
     assert top["identificador"] == "br:federal:congresso-nacional:resolucao:1:2002"
     assert top["orgao"] == "congresso-nacional"
-    assert top["vigencia"] == "nao_verificada"
+    assert top["vigencia"]["campos"]["vigencia"] == "nao_verificada"
+    assert top["vigencia"]["estado"] == "nao_informada"
+    assert top["redacao"]["compilada"] is True
     assert "/DF/" not in top["caminho"]
 
     article = asyncio.run(_call(home, "ler_artigo", {"norma": "resolucao 1/2002-cn", "artigo": "7"}))

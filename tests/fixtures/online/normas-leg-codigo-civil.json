@@ -1,0 +1,267 @@
+{
+ "@type": "Legislation",
+ "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406",
+ "legislationType": {
+  "@type": "CategoryCode",
+  "@id": "https://normas.leg.br/tipo-de-norma/?urn=urn:lex:br:federal:tipo.norma:lei"
+ },
+ "legislationDate": "2002-01-10",
+ "encoding": [
+  {
+   "version": "Original"
+  },
+  {
+   "version": "Current"
+  }
+ ],
+ "hasPart": [
+  {
+   "@type": "Legislation",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406!art1_cpt",
+   "legislationType": {
+    "@type": "CategoryCode",
+    "@id": "https://normas.leg.br/tipo-de-dispositivo/?urn=urn:lex:br:federal:tipo.dispositivo:caput"
+   },
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406!art1_cpt"
+  },
+  {
+   "legislationDate": "2002-01-10",
+   "@type": "Legislation",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art1_cpt",
+   "legislationType": "Original_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art1_cpt",
+   "text": "Toda pessoa é capaz de direitos e deveres na ordem civil."
+  },
+  {
+   "@type": "Legislation",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406!art3",
+   "legislationType": {
+    "@type": "CategoryCode",
+    "@id": "https://normas.leg.br/tipo-de-dispositivo/?urn=urn:lex:br:federal:tipo.dispositivo:artigo"
+   },
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406!art3"
+  },
+  {
+   "legislationDate": "2002-01-10",
+   "@type": "Legislation",
+   "name": "Art. 3º",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art3",
+   "legislationType": "Original_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art3"
+  },
+  {
+   "@type": "Legislation",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406!art3_cpt",
+   "legislationType": {
+    "@type": "CategoryCode",
+    "@id": "https://normas.leg.br/tipo-de-dispositivo/?urn=urn:lex:br:federal:tipo.dispositivo:caput"
+   },
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406!art3_cpt"
+  },
+  {
+   "temporalCoverage": "2002-01-10/2015-07-05",
+   "legislationDate": "2002-01-10",
+   "@type": "Legislation",
+   "legislationLegalForce": "NotInForce",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art3_cpt",
+   "legislationType": "Original_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art3_cpt",
+   "text": "São absolutamente incapazes de exercer pessoalmente os atos da vida civil:",
+   "@reverse": {
+    "legislationAmends": {
+     "@type": "Legislation",
+     "name": "Lei nº 13.146 de 06/07/2015",
+     "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2015-07-06;13146@2015-07-06!art114_cpt_alt1_art3_cpt"
+    }
+   }
+  },
+  {
+   "additionalType": "Text_Change",
+   "legislationConsolidates": {
+    "@type": "Legislation",
+    "name": "Lei nº 13.146 de 06/07/2015",
+    "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2015-07-06;13146@2015-07-06!art114_cpt_alt1_art3_cpt"
+   },
+   "legislationDate": "2015-07-06",
+   "@type": "Legislation",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2015-07-06!art3_cpt",
+   "legislationType": "Text_Change_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2015-07-06!art3_cpt",
+   "text": "São absolutamente incapazes de exercer pessoalmente os atos da vida civil os menores de 16 (dezesseis) anos."
+  },
+  {
+   "temporalCoverage": "2002-01-10/2015-07-06",
+   "@type": "Legislation",
+   "legislationLegalForce": "NotInForce",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406!art3_cpt_inc1",
+   "legislationType": {
+    "@type": "CategoryCode",
+    "@id": "https://normas.leg.br/tipo-de-dispositivo/?urn=urn:lex:br:federal:tipo.dispositivo:inciso"
+   },
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406!art3_cpt_inc1"
+  },
+  {
+   "temporalCoverage": "2002-01-10/2015-07-05",
+   "legislationDate": "2002-01-10",
+   "@type": "Legislation",
+   "legislationLegalForce": "NotInForce",
+   "name": "I –",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art3_cpt_inc1",
+   "legislationType": "Original_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art3_cpt_inc1",
+   "text": "os menores de dezesseis anos;",
+   "@reverse": {
+    "legislationRepeals": {
+     "@type": "Legislation",
+     "name": "Lei nº 13.146 de 06/07/2015",
+     "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2015-07-06;13146@2015-07-06!art123_cpt_inc2_alt1_art3_cpt_inc1"
+    }
+   }
+  },
+  {
+   "additionalType": "Repeal",
+   "legislationConsolidates": {
+    "@type": "Legislation",
+    "name": "Lei nº 13.146 de 06/07/2015",
+    "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2015-07-06;13146@2015-07-06!art123_cpt_inc2_alt1_art3_cpt_inc1"
+   },
+   "legislationDate": "2015-07-06",
+   "@type": "Legislation",
+   "name": "I –",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2015-07-06!art3_cpt_inc1",
+   "legislationType": "Repeal_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2015-07-06!art3_cpt_inc1",
+   "text": "(Revogado)"
+  },
+  {
+   "temporalCoverage": "2002-01-10/2015-07-06",
+   "@type": "Legislation",
+   "legislationLegalForce": "NotInForce",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406!art3_cpt_inc2",
+   "legislationType": {
+    "@type": "CategoryCode",
+    "@id": "https://normas.leg.br/tipo-de-dispositivo/?urn=urn:lex:br:federal:tipo.dispositivo:inciso"
+   },
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406!art3_cpt_inc2"
+  },
+  {
+   "temporalCoverage": "2002-01-10/2015-07-05",
+   "legislationDate": "2002-01-10",
+   "@type": "Legislation",
+   "legislationLegalForce": "NotInForce",
+   "name": "II –",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art3_cpt_inc2",
+   "legislationType": "Original_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art3_cpt_inc2",
+   "text": "os que, por enfermidade ou deficiência mental, não tiverem o necessário discernimento para a prática desses atos;",
+   "@reverse": {
+    "legislationRepeals": {
+     "@type": "Legislation",
+     "name": "Lei nº 13.146 de 06/07/2015",
+     "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2015-07-06;13146@2015-07-06!art123_cpt_inc2_alt1_art3_cpt_inc2"
+    }
+   }
+  },
+  {
+   "additionalType": "Repeal",
+   "legislationConsolidates": {
+    "@type": "Legislation",
+    "name": "Lei nº 13.146 de 06/07/2015",
+    "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2015-07-06;13146@2015-07-06!art123_cpt_inc2_alt1_art3_cpt_inc2"
+   },
+   "legislationDate": "2015-07-06",
+   "@type": "Legislation",
+   "name": "II –",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2015-07-06!art3_cpt_inc2",
+   "legislationType": "Repeal_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2015-07-06!art3_cpt_inc2",
+   "text": "(Revogado)"
+  },
+  {
+   "temporalCoverage": "2002-01-10/2015-07-06",
+   "@type": "Legislation",
+   "legislationLegalForce": "NotInForce",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406!art3_cpt_inc3",
+   "legislationType": {
+    "@type": "CategoryCode",
+    "@id": "https://normas.leg.br/tipo-de-dispositivo/?urn=urn:lex:br:federal:tipo.dispositivo:inciso"
+   },
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406!art3_cpt_inc3"
+  },
+  {
+   "temporalCoverage": "2002-01-10/2015-07-05",
+   "legislationDate": "2002-01-10",
+   "@type": "Legislation",
+   "legislationLegalForce": "NotInForce",
+   "name": "III –",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art3_cpt_inc3",
+   "legislationType": "Original_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art3_cpt_inc3",
+   "text": "os que, mesmo por causa transitória, não puderem exprimir sua vontade.",
+   "@reverse": {
+    "legislationRepeals": {
+     "@type": "Legislation",
+     "name": "Lei nº 13.146 de 06/07/2015",
+     "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2015-07-06;13146@2015-07-06!art123_cpt_inc2_alt1_art3_cpt_inc3"
+    }
+   }
+  },
+  {
+   "additionalType": "Repeal",
+   "legislationConsolidates": {
+    "@type": "Legislation",
+    "name": "Lei nº 13.146 de 06/07/2015",
+    "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2015-07-06;13146@2015-07-06!art123_cpt_inc2_alt1_art3_cpt_inc3"
+   },
+   "legislationDate": "2015-07-06",
+   "@type": "Legislation",
+   "name": "III –",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2015-07-06!art3_cpt_inc3",
+   "legislationType": "Repeal_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2015-07-06!art3_cpt_inc3",
+   "text": "(Revogado)"
+  },
+  {
+   "@type": "Legislation",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406!art4_par1u",
+   "legislationType": {
+    "@type": "CategoryCode",
+    "@id": "https://normas.leg.br/tipo-de-dispositivo/?urn=urn:lex:br:federal:tipo.dispositivo:paragrafo"
+   },
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406!art4_par1u"
+  },
+  {
+   "temporalCoverage": "2002-01-10/2015-07-05",
+   "legislationDate": "2002-01-10",
+   "@type": "Legislation",
+   "legislationLegalForce": "NotInForce",
+   "name": "Parágrafo único.",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art4_par1u",
+   "legislationType": "Original_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2002-01-10!art4_par1u",
+   "text": "A capacidade dos índios será regulada por legislação especial.",
+   "@reverse": {
+    "legislationAmends": {
+     "@type": "Legislation",
+     "name": "Lei nº 13.146 de 06/07/2015",
+     "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2015-07-06;13146@2015-07-06!art114_cpt_alt1_art4_par1u"
+    }
+   }
+  },
+  {
+   "additionalType": "Text_Change",
+   "legislationConsolidates": {
+    "@type": "Legislation",
+    "name": "Lei nº 13.146 de 06/07/2015",
+    "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2015-07-06;13146@2015-07-06!art114_cpt_alt1_art4_par1u"
+   },
+   "legislationDate": "2015-07-06",
+   "@type": "Legislation",
+   "name": "Parágrafo único.",
+   "legislationIdentifier": "urn:lex:br:federal:lei:2002-01-10;10406@2015-07-06!art4_par1u",
+   "legislationType": "Text_Change_Version",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2002-01-10;10406@2015-07-06!art4_par1u",
+   "text": "A capacidade dos indígenas será regulada por legislação especial."
+  }
+ ]
+}

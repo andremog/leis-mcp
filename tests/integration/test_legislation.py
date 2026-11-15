@@ -74,7 +74,13 @@ def test_constitution_and_transitional_provisions(service):
 
 
 def test_repealed_provision_has_notice(service):
-    assert any("revogação" in notice for notice in service.read_provision("código civil", "374")["avisos"])
+    response = service.read_provision("código civil", "374")
+    assert response["dispositivo"]["situacao"] == {
+        "revogado": True,
+        "vetado": False,
+        "nota": "Revogado pela Lei nº 10.677, de 22/5/2003",
+    }
+    assert any("REVOGADO" in notice for notice in response["avisos"])
 
 
 def test_find_labour_code(service):
@@ -126,3 +132,60 @@ def test_browse(service):
     assert service.browse("estaduais")["nivel"] == "uf"
     page = service.browse("federal", "leis-complementares", 2006)["normas"]
     assert "federal/leis-complementares/2006/lcp-123-2006-12-14.md" in [norm["caminho"] for norm in page]
+
+
+def test_repealed_article_names_the_repealing_law(service):
+    response = service.read_provision("CLT", "17")
+    assert response["dispositivo"]["situacao"]["nota"] == "Revogado pela Lei nº 13.874, de 20/9/2019"
+    assert response["vigencia"]["estado"] == "sem_revogacao_registrada"
+    assert response["vigencia_online"]["disponivel"] is False
+
+
+def test_word_revoked_in_the_text_is_not_a_repeal(service):
+    response = service.read_provision("código penal", "88")
+    assert "situacao" not in response["dispositivo"]
+    assert response["avisos"] == []
+
+
+def test_repealed_law_with_its_repeal_note(service):
+    response = service.read_provision("8666/1993", "1")
+    assert response["vigencia"]["estado"] == "revogada"
+    assert response["vigencia"]["revogada_por"].startswith("Revogada em 30/12/2023 pela Lei nº 14.133")
+    assert response["redacao"]["compilada"] is True
+    assert response["redacao"]["capturada_em"]
+
+
+def test_decree_not_in_force_is_flagged_in_search(service):
+    top = service.find_norms("Decreto 69.582/1971")["resultados"][0]
+    assert top["vigencia"]["estado"] == "sem_vigencia_na_fonte"
+    assert top["vigencia"]["campos"] == {"forca_legal_fonte": '["NotInForce"]'}
+    assert any("NÃO está em vigor" in notice for notice in top["avisos"])
+
+
+def test_state_status_from_the_source(service):
+    path = "estaduais/DF/decretos-legislativos/2001/dlg-718-2001-07-10.md"
+    response = service.read_provision(path, "1")
+    assert response["vigencia"]["estado"] == "sem_revogacao_registrada"
+    assert response["vigencia"]["campos"]["situacao"] == "Sem Revogação Expressa"
+    assert response["vigencia_online"]["disponivel"] is False
+
+
+def test_text_search_and_browse_show_validity(service):
+    group = service.search_text("caderneta de poupanca", norm="inquilinato")["resultados"][0]
+    assert group["norma"]["vigencia"]["estado"] == "sem_revogacao_registrada"
+    service.read_provision("LC 123/2006", "1")
+    page = service.browse("federal", "leis-complementares", 2006)["normas"]
+    listed = next(norm for norm in page if norm["caminho"] == "federal/leis-complementares/2006/lcp-123-2006-12-14.md")
+    assert listed["vigencia"] == "sem_revogacao_registrada"
+
+
+def test_live_online_validity(online_service):
+    clause = online_service.read_provision("código civil", "3", clause="I")["vigencia_online"]
+    assert clause["disponivel"] is True
+    assert clause["dispositivo"]["situacao"] == "revogado"
+    assert clause["dispositivo"]["versoes"][-1]["alterado_por"].startswith("Lei nº 13.146")
+    repealed_law = online_service.read_provision("8666/1993", "1")
+    assert repealed_law["vigencia_online"]["norma"]["forca_legal"] == "NotInForce"
+    assert repealed_law["vigencia"]["origem"].startswith("acervo ctresb/leis e consulta online")
+    labour = online_service.read_provision("CLT", "17")["vigencia_online"]["dispositivo"]
+    assert labour["situacao"] == "revogado"

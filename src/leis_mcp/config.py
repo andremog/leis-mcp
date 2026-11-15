@@ -16,6 +16,20 @@ Transport = Literal["stdio", "streamable-http"]
 TRANSPORTS: tuple[Transport, ...] = ("stdio", "streamable-http")
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
+_ONLINE_TTL_MAX_DAYS = 30.0
+
+
+def _online_ttl(raw: str | None) -> float:
+    """Days to keep an online validity record. Unusable values fall back to 7; never negative or unbounded."""
+    if raw is None or not raw.strip():
+        return 7.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return 7.0
+    if value != value or value < 0 or value > _ONLINE_TTL_MAX_DAYS:  # NaN, negative, or an unbounded cache
+        return 7.0
+    return value
 
 
 def default_host() -> str:
@@ -39,6 +53,8 @@ class Settings:
     api_key: str | None = field(default=None, repr=False)
     # HTTP transport only: prefetch the aliased laws in the background at startup.
     warm_on_start: bool = False
+    online: bool = True  # validity lookup on normas.leg.br and the Senado, for federal norms
+    online_ttl_days: float = 7
 
     @property
     def repo_dir(self) -> Path:
@@ -72,4 +88,6 @@ class Settings:
             index_url=os.environ.get("LEIS_MCP_INDEX_URL", INDEX_URL),
             api_key=os.environ.get("LEIS_MCP_API_KEY") or None,
             warm_on_start=os.environ.get("LEIS_MCP_WARM_ON_START", "").lower() in ("1", "true", "yes"),
+            online=os.environ.get("LEIS_MCP_OFFLINE", "").strip().lower() not in ("1", "true", "yes"),
+            online_ttl_days=_online_ttl(os.environ.get("LEIS_MCP_ONLINE_TTL_DAYS")),
         )

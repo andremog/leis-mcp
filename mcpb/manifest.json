@@ -32,7 +32,7 @@
     },
     {
       "name": "ler_artigo",
-      "description": "Devolve o texto exato de um artigo, parágrafo, inciso ou alínea, com o caput, a fonte e os avisos."
+      "description": "Devolve o texto exato de um artigo, parágrafo, inciso ou alínea, com o caput, a fonte, a vigência e a redação, e os avisos."
     },
     {
       "name": "buscar_texto",
