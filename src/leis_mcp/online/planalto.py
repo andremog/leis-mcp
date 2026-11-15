@@ -97,20 +97,39 @@ def _struck(element: HtmlElement) -> bool:
     return "text-decoration:line-through" in style or "text-decoration-line:line-through" in style
 
 
-def _detach_keeping_tail(element: HtmlElement) -> None:
-    """Drop a struck element but keep the text that follows it in the parent."""
-    parent = element.getparent()
-    if parent is None:
-        return
-    tail = element.tail
-    if tail:
-        previous = element.getprevious()
-        if previous is not None:
-            previous.tail = (previous.tail or "") + tail
+def _drop_struck(element: HtmlElement) -> None:
+    """Remove struck children in one pass. Each tail is copied once, not onto a growing prefix."""
+    pending: list[str] = [element.text or ""]
+    element.text = None
+    first_kept = True
+    for child in list(element):
+        if isinstance(child.tag, str) and _struck(child):
+            pending.append(child.tail or "")
+            element.remove(child)
+            continue
+        _drop_struck(child)
+        prefix = "".join(pending)
+        pending = []
+        if first_kept:
+            element.text = prefix or None
+            first_kept = False
         else:
-            parent.text = (parent.text or "") + tail
-        element.tail = None
-    parent.remove(element)
+            previous = child.getprevious()
+            if previous is not None:
+                previous.tail = (previous.tail or "") + prefix
+            else:
+                element.text = (element.text or "") + prefix
+    if not pending:
+        return
+    extra = "".join(pending)
+    if first_kept:
+        element.text = extra or None
+        return
+    last = element[-1] if len(element) else None
+    if last is not None:
+        last.tail = (last.tail or "") + extra
+    else:
+        element.text = (element.text or "") + extra
 
 
 def _render(element: HtmlElement) -> str:
@@ -142,9 +161,7 @@ def html_to_body(page: str) -> str:
         root = document_fromstring(page, parser=HTMLParser(**_PARSER_KWARGS))
     except ParserError:
         return ""
-    for element in list(root.iter()):
-        if isinstance(element.tag, str) and _struck(element):
-            _detach_keeping_tail(element)
+    _drop_struck(root)
     body = root.find("body")
     text = _render(body if body is not None else root)
     text = _HEADING.sub("\n", text)
@@ -264,13 +281,17 @@ def _subclause_conflict(article, start: int, end: int, subclause: str | None) ->
 
 
 def _child_spans(article, level: Level, start: int, end: int, key: str | None) -> list[tuple[int, int]]:
-    lines = [
-        unit.line
-        for unit in article.units
-        if unit.level == level and start <= unit.line < end and (key is None or unit.key == key)
-    ]
-    bounds = [*lines, end]
-    return list(zip(lines, bounds[1:], strict=False))
+    """Each device ends at the next sibling of the same level, or at `end` when it is the last.
+
+    Filtering by key happens after the bounds are known, so inciso I stops at inciso II and does
+    not absorb II's alíneas.
+    """
+    units = [unit for unit in article.units if unit.level == level and start <= unit.line < end]
+    lines = [unit.line for unit in units]
+    spans = list(zip(lines, [*lines[1:], end], strict=False))
+    if key is None:
+        return spans
+    return [span for unit, span in zip(units, spans, strict=True) if unit.key == key]
 
 
 def _keys(article, level: Level, start: int, end: int) -> list[str]:

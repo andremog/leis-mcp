@@ -413,6 +413,46 @@ def test_whole_article_allows_inciso_numbering_to_restart(tmp_path):
     assert "verificação da capacitação" not in inner["dispositivo"]["texto"]
 
 
+def test_sibling_alineas_stay_with_their_own_inciso_and_a_duplicate_fails_closed(tmp_path):
+    page = """<html><body>
+    <p>LEI Nº 14.133, DE 1º DE ABRIL DE 2021</p>
+    <p>Art. 37. Caput com incisos.</p>
+    <p>I - primeiro inciso do caput.</p>
+    <p>a) alínea do inciso I.</p>
+    <p>II - segundo inciso do caput.</p>
+    <p>a) alínea do inciso II.</p>
+    <p>§ 2º Parágrafo com dois a no mesmo inciso.</p>
+    <p>I - inciso do parágrafo:</p>
+    <p>a) primeira ocorrência.</p>
+    <p>a) segunda ocorrência no mesmo inciso.</p>
+    </body></html>"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=page)
+
+    loaded = _load(VETO_14133, _norm("14133", 2021))
+    corrector = _corrector(tmp_path, handler)
+    service = _Service({})
+    inciso_i = corrector.read(service, loaded, "37", None, "I", None, None)
+    assert "primeiro inciso do caput" in inciso_i["dispositivo"]["texto"]
+    assert "alínea do inciso I" in inciso_i["dispositivo"]["texto"]
+    assert "inciso II" not in inciso_i["dispositivo"]["texto"]
+    alinea_i = corrector.read(service, loaded, "37", None, "I", "a", None)
+    assert alinea_i["dispositivo"]["texto"].startswith("a) alínea do inciso I.")
+    alinea_ii = corrector.read(service, loaded, "37", None, "II", "a", None)
+    assert alinea_ii["dispositivo"]["texto"].startswith("a) alínea do inciso II.")
+    with pytest.raises(QueryError, match="dois rótulos vigentes") as error:
+        corrector.read(service, loaded, "37", "2", "I", "a", None)
+    assert "primeira ocorrência" not in str(error.value)
+    assert "segunda ocorrência" not in str(error.value)
+
+
+def test_many_empty_strikes_are_removed_without_dropping_the_text():
+    page = "<div><p>LEI Nº 14.133, DE 1º DE ABRIL DE 2021</p><p>Art. 1º " + "<s></s>x" * 4000 + "</p></div>"
+    body = html_to_body(page)
+    assert "x" * 4000 in re.sub(r"\s+", "", body)
+
+
 def test_repeated_inciso_inside_one_paragraph_fails_closed(tmp_path):
     page = """<html><body>
     <p>LEI Nº 14.133, DE 1º DE ABRIL DE 2021</p>
