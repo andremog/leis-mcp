@@ -72,6 +72,28 @@ INVALID_SUBCLAUSE = "Alínea inválida: {value!r}."
 NO_ARTICLES = "Não encontrei artigos em {path} (formato não reconhecido). Fonte: {source}"
 ARTICLE_NOT_FOUND = "Art. {article} não encontrado."
 VETO_PROMULGATION_ONLY = "O arquivo traz só a promulgação de partes vetadas, não o texto integral da norma."
+PLANALT_OBTAINED = "texto obtido do Planalto em {date}, acervo local incompleto"
+PLANALT_OFFLINE = (
+    "Consulta ao Planalto desligada (LEIS_MCP_OFFLINE=1). O acervo local não tem o art. {article} "
+    "e o arquivo está incompleto."
+)
+PLANALT_UNAVAILABLE = "Não foi possível obter o texto no Planalto ({reason}). O acervo local está incompleto."
+PREAMBLE_REJECTED = (
+    "O preâmbulo não atribui estas partes vetadas à Lei nº {number} de forma única. "
+    "Nada foi devolvido para não apresentar o artigo errado."
+)
+NOT_THIS_LAW = (
+    "Art. {article} não é dispositivo da Lei nº {number}. O art. {host} desta lei deu nova redação "
+    "ao art. {article} da Lei nº {other}."
+)
+NOT_THIS_LAW_UNKNOWN = (
+    "Art. {article} não é dispositivo da Lei nº {number}. O art. {host} desta lei traz redação nova "
+    "(NR)/(AC) de um art. {article}, mas a lei alterada não ficou identificada de forma única."
+)
+OTHER_LAW_MISSING = "Art. {article} não encontrado no acervo da Lei nº {number}."
+WORDING_IN_FORCE = (
+    "Redação em vigor obtida do Planalto em {date}. O acervo local ({captured}) é anterior à alteração de {since}."
+)
 ARTICLE_NOT_IN_BLOCK = "Art. {article} não encontrado no bloco {block!r}."
 PARAGRAPH_NOT_FOUND = "{paragraph} não encontrado no Art. {article}."
 CLAUSE_NOT_FOUND = "Inciso {clause} não encontrado no Art. {article}{scope}."

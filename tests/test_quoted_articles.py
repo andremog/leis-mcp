@@ -217,6 +217,26 @@ Faço saber que eu promulgo as seguintes partes vetadas:
         extractor.extract("20-A")
 
 
+def test_a_marked_insertion_does_not_swallow_the_next_article_of_this_law():
+    body = """
+Faço saber que eu promulgo as seguintes partes vetadas da Lei nº 14.162:
+
+"Art. 5º A Lei nº 9.264 passa a vigorar acrescida do seguinte art. 12-C:
+
+'Art. 12-C. Sem prejuízo dos direitos dos servidores. (NR)
+
+"Art. 19. A Lei nº 13.756 passa a vigorar acrescida do seguinte art. 20-A:
+
+"Art. 20-A. Destinação de 3% da arrecadação das loterias.
+
+"Art. 21. Os prazos de validade das certidões serão prorrogados.
+"""
+    assert _keys(body) == ["5", "19", "21"]
+    text = ProvisionExtractor(DocumentParser().parse(body)).extract("5").text
+    assert "Sem prejuízo dos direitos dos servidores." in text
+    assert "Art. 21" not in text
+
+
 def test_repeated_heading_is_the_wording_of_the_same_article():
     body = """
 Faço saber que eu promulgo as seguintes partes vetadas:
@@ -231,12 +251,14 @@ Faço saber que eu promulgo as seguintes partes vetadas:
 """
     document = DocumentParser().parse(body)
     extractor = ProvisionExtractor(document)
-    assert _keys(body) == ["1", "2"]
+    assert _keys(body) == ["1"]
     assert len(document.blocks) == 1
     text = extractor.extract("1").text
     assert text.startswith('**"Art**. 1º')
     assert "Esta Lei dispõe sobre o texto promulgado." in text
-    assert extractor.extract("2", paragraph="3").text.startswith("**§ 3º**")
+    assert "Parágrafo do artigo 2" in text
+    assert {item.target for item in document.insertions} >= {"1", "2"}
+    assert all(item.host == "1" for item in document.insertions)
 
 
 def test_quoted_inciso_is_addressable_and_a_missing_unit_keeps_the_warning():

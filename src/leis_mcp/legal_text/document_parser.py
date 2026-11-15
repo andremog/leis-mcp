@@ -7,6 +7,7 @@ from dataclasses import replace
 
 from .. import messages
 from ..document import Article, Block, Heading, LegalDocument, Unit
+from .insertions import find_insertions, preamble_numbers
 from .labels import UNIT_LABELS, ArticleLabel, Label
 
 
@@ -24,6 +25,8 @@ class DocumentParser:
     # than reporting that the format was not recognized.
     _ERRATA = re.compile(r"onde se (?:l[eêi]|diz)|leia\s*[-–—]?\s*se", re.IGNORECASE)
     _ARTIGO_UNICO = re.compile(r"(?m)^[\s*_\"'“”«»]*Artigo\s+único\b", re.IGNORECASE)
+    _QUOTE = re.compile(r"""^[\s*_]*['"“”«»]""")
+    _MARKER = re.compile(r"\((?:NR|AC)\)", re.IGNORECASE)
 
     def parse(self, body: str) -> LegalDocument:
         # Only "\n": line numbers must match the search engines' (str.splitlines also breaks on \f, \x85...).
@@ -44,7 +47,14 @@ class DocumentParser:
             quoted = bool(starts)
         boundaries = sorted(stops | {index for index, _ in starts} | {len(lines)})
         articles = [self._article(lines, start, key, boundaries, quoted) for start, key in starts]
-        return LegalDocument(lines, self._group_into_blocks(articles, headings), quoted_fallback=quoted)
+        document = LegalDocument(
+            lines,
+            self._group_into_blocks(articles, headings),
+            quoted_fallback=quoted,
+            promulgated_numbers=preamble_numbers(body),
+        )
+        document.insertions = find_insertions(document)
+        return document
 
     def _is_veto_promulgation(self, body: str) -> bool:
         return bool(
@@ -63,26 +73,45 @@ class DocumentParser:
         ]
 
     def _quoted_starts(self, lines: list[str], stops: set[int]) -> list[tuple[int, str]]:
-        """Quoted headings of a veto promulgation, without splitting an article quoted inside another.
+        """Quoted headings that are this law's own articles.
 
-        A line introduced by a colon (`acrescida do seguinte art. 12-C:`) is the inserted text of the
-        article above it. A second heading with the same number is the wording of that article, not a
-        new block.
+        A heading introduced by a colon, or whose own block ends in `(NR)` or `(AC)`, belongs to the
+        amended law. Later headings stay inside only when they use a different quote from the host
+        article (the nested wording). A later heading in the host's own quote style is the next
+        article of this promulgation. The preamble's trailing colon does not swallow the first heading.
         """
-        starts: list[tuple[int, str]] = []
+        candidates: list[tuple[int, str, str]] = []
         previous = ""
         for index, line in enumerate(lines):
             stripped = line.strip()
-            key = None if index in stops else ArticleLabel.from_quoted_line(line)
-            # The preamble itself ends with a colon ("as seguintes partes vetadas:"). That must not
-            # swallow the first article. A colon only keeps a later heading inside the article above it.
-            introduced = bool(starts) and previous.rstrip("\"'”»").endswith(":")
-            repeated = bool(starts) and key == starts[-1][1]
-            if key and not introduced and not repeated:
-                starts.append((index, key))
+            key = None if index in stops or not self._QUOTE.match(line) else ArticleLabel.from_quoted_line(line)
+            if key:
+                candidates.append((index, key, previous))
             if stripped:
                 previous = stripped
+        starts: list[tuple[int, str]] = []
+        host_style = ""
+        inside_new_wording = False
+        for position, (index, key, previous) in enumerate(candidates):
+            end = candidates[position + 1][0] if position + 1 < len(candidates) else len(lines)
+            introduced = bool(starts) and previous.rstrip("\"'”»").endswith(":")
+            marked = bool(self._MARKER.search("\n".join(lines[index:end])))
+            style = self._quote_style(lines[index])
+            nested = inside_new_wording and bool(style) and style != host_style
+            if starts and (introduced or marked or nested):
+                inside_new_wording = inside_new_wording or marked
+                continue
+            starts.append((index, key))
+            host_style = style
+            inside_new_wording = False
         return starts
+
+    @staticmethod
+    def _quote_style(line: str) -> str:
+        match = re.search(r"""['"“”«»]""", line)
+        if not match:
+            return ""
+        return "'" if match.group() in "'‘’" else '"'
 
     def _article(self, lines: list[str], start: int, key: str, boundaries: list[int], quoted: bool = False) -> Article:
         end = boundaries[bisect.bisect_right(boundaries, start)]
