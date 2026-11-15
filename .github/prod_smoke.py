@@ -93,7 +93,7 @@ except Exception as exc:  # noqa: BLE001
 checks = [
     ("listar_normas", {}, ("federal",), ()),
     ("buscar_norma", {"referencia": "Lei 8.245/91"}, ("8.245", "8245"), ()),
-    ("buscar_texto", {"consulta": "locação", "norma": "Lei 8.245/91", "limite": 1}, ("artigo",), ()),
+    ("buscar_texto", {"consulta": "locação", "norma": "Lei 8.245/91", "limite": 1}, ("total_ocorrencias",), ()),
     ("ler_artigo", {"norma": "Lei 8.245/91", "artigo": "1"}, ("Art.",), ("Não encontrei",)),
     (
         "ler_artigo",
@@ -125,6 +125,18 @@ for index, (label, arguments) in enumerate(reports, start=20):
         "14017" if "14.017" in text else "sem_14017",
         "nao_encontrei" if "Não encontrei" in text else "texto",
     )
+
+try:
+    import httpx
+
+    direct = httpx.get(
+        "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14133.htm",
+        follow_redirects=False,
+        timeout=20,
+    )
+    print("PLANALTO_DIRECT", direct.status_code, (direct.headers.get("location") or "")[:180])
+except Exception as exc:  # noqa: BLE001
+    print("PLANALTO_DIRECT", type(exc).__name__, str(exc)[:180])
 
 print("SMOKE_DONE")
 sys.exit(1 if essential_fail else 0)

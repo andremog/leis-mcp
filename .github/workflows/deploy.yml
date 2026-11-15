@@ -78,7 +78,7 @@ jobs:
 
       - name: Record release
         if: success()
-        run: flyctl releases list -a "$APP" | head -20
+        run: flyctl releases -a "$APP" --image | head -20
 
       - name: Regression smoke
         id: regression
@@ -111,7 +111,11 @@ jobs:
       - name: Autocorrection log
         if: always()
         continue-on-error: true
-        run: flyctl logs -a "$APP" --no-tail 2>&1 | grep -F autocorrection | tail -n 40
+        run: |
+          timeout 25 flyctl logs -a "$APP" > /tmp/fly.log 2>&1 || true
+          grep -F autocorrection /tmp/fly.log | tail -n 40 || true
+          echo "---- fly logs sample ----"
+          head -n 40 /tmp/fly.log
 
       - name: Roll back
         if: failure() && (steps.smoke.outcome == 'failure' || steps.regression.outcome == 'failure') && steps.preflight.outputs.previous != ''
