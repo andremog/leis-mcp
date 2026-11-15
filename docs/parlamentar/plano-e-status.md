@@ -2,7 +2,7 @@
 
 Este arquivo é o plano e o status. Não depende de página externa. Os detalhes de arquitetura, inventário e operação que já estavam no repositório continuam em [arquitetura.md](arquitetura.md), [inventario.md](inventario.md) e [operacao.md](operacao.md).
 
-Data deste status: **8 de novembro de 2026, 16:41, horário de São Paulo**. O dono pediu parada depois da documentação. Este commit só registra o plano e o estado. Não retoma correção, não publica o candidato 0.2.0 e não altera produção.
+Data deste status: **15 de novembro de 2026**. O registro de 8 de novembro continua abaixo. Esta atualização não faz deploy e não altera segredo.
 
 ## Objetivo
 
@@ -184,3 +184,13 @@ A preservação do overlay numa reindexação ao vivo do upstream, e o restante 
 ## Status em 15 de novembro de 2026
 
 O dono aprovou integrar o upstream mazulo/leis-mcp v0.3.0 (vigência e redação, consulta a normas.leg.br e ao Senado) neste fork, preservando a autenticação Bearer, o `/health`, o Fly e o acervo parlamentar. Esta nota não publica, não faz deploy e não altera segredo. A consulta online nova sai só para esses dois hosts oficiais, com prazo e limite de corpo; `LEIS_MCP_OFFLINE=1` desliga. As normas do overlay não têm URN, então a leitura delas não dispara essa consulta. O campo `vigencia` das ferramentas passa a ser o objeto da 0.3.0; o valor `nao_verificada` do overlay continua em `vigencia.campos.vigencia` e no aviso de vigência não verificada.
+
+Produção: Fly release **v5**, imagem `registry.fly.io/leis-mcp-andremog:rev-e2fbfc1` (upstream 0.3.0 com a consulta online ligada, merge pelo [PR 6](https://github.com/andremog/leis-mcp/pull/6)). A conferência anterior, de 6 de novembro, era a release v2 `rev-486b4e0`. Auth e volume não mudaram.
+
+Em 15 de novembro de 2026, entre 07:50 e 08:10, horário de São Paulo, `www.camara.leg.br` respondia HTTP 200, e toda página sob `www2.camara.leg.br/legin/` respondia HTTP **504** `upstream request timeout` (servidor `envoy`, borda da própria Câmara) depois de cerca de 15 s. O 504 se repetiu na máquina desta sessão, na máquina Fly em gru e em nós do check-host.net no Brasil, em Portugal, nos Estados Unidos, em Hong Kong, na Ucrânia e no Irã. Não é bloqueio geográfico, não é bloqueio de User-Agent, não é DNS nem IPv6.
+
+A produção não usa essa origem para responder. Em execução, a rede do processo só alcança `normas.leg.br` e `legis.senado.leg.br`. O overlay é lido de `/data/overlay`.
+
+Não rodar `leis-mcp overlay collect` até as páginas sob `www2.camara.leg.br/legin/` voltarem. Quando voltarem, a coleta tem de ser na máquina Fly. Na máquina desta sessão o proxy de saída apresenta `198.18.0.1`, e o coletor recusa esse endereço porque não é público.
+
+O teste ao vivo `test_bounded_official_resolution_page` segue na suíte que a CI executa (`uv run pytest`). O pytest lista os skips (`-rs`), então a razão aparece no resumo. O skip só ocorre quando a fonte oficial está indisponível: HTTP 502, 503 ou 504, prazo esgotado, erro de conexão ou falha de handshake TLS na abertura. Falha de verificação do certificado (`ssl.SSLCertVerificationError`) continua falhando o teste. A razão cita o status ou a exceção. Conteúdo, tamanho, estrutura e qualquer outro HTTP continuam falhando o teste. Não há flag `LEIS_LIVE_CAMARA`. O opt-in `LEIS_MCP_LIVE_TESTS=1` continua só na consulta ao vivo de `normas.leg.br` e do Senado; desligar o teste da Câmara por padrão esconderia uma página que voltou com o texto errado.
