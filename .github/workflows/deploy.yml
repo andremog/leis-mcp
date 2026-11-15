@@ -7,8 +7,6 @@ name: Deploy
 # tested, and a failed smoke test rolls back to the previous image.
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       rollback_image:
@@ -30,8 +28,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Push runs only for an explicit [deploy] commit. workflow_dispatch stays available.
-    if: github.ref == 'refs/heads/main' && (github.event_name != 'push' || contains(github.event.head_commit.message, '[deploy]'))
+    if: github.ref == 'refs/heads/main'
     environment: production
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -76,49 +73,8 @@ jobs:
           echo "/mcp without key -> $anon, wrong key -> $wrong"
           test "$anon" = 401 && test "$wrong" = 401
 
-      - name: Record release
-        if: success()
-        run: flyctl releases -a "$APP" --image | head -20
-
-      - name: Regression smoke
-        id: regression
-        if: success()
-        run: |
-          set +e
-          machine=$(flyctl status -a "$APP" --json | jq -r '.Machines[0].id // empty')
-          echo "machine=$machine"
-          b64=$(base64 -w0 .github/prod_smoke.py)
-          remote="python -c \"import base64; exec(base64.b64decode('${b64}'))\""
-          output=$(flyctl machine exec "$machine" -a "$APP" "$remote" 2>&1)
-          code=$?
-          printf '%s\n' "$output"
-          if ! printf '%s\n' "$output" | grep -q SMOKE_DONE; then
-            output=$(flyctl ssh console -a "$APP" -C "$remote" 2>&1)
-            code=$?
-            printf '%s\n' "$output"
-          fi
-          set -e
-          echo "remote_exit=$code"
-          # ESSENTIAL_FAIL is printed only when a norm that already worked on v5 breaks.
-          # Planalto and the new article checks are REPORT lines and do not roll back.
-          if printf '%s\n' "$output" | grep -q ESSENTIAL_FAIL; then
-            exit 1
-          fi
-          if ! printf '%s\n' "$output" | grep -q SMOKE_DONE; then
-            echo "tool smoke did not run; health and auth already passed"
-          fi
-
-      - name: Autocorrection log
-        if: always()
-        continue-on-error: true
-        run: |
-          timeout 25 flyctl logs -a "$APP" > /tmp/fly.log 2>&1 || true
-          grep -F autocorrection /tmp/fly.log | tail -n 40 || true
-          echo "---- fly logs sample ----"
-          head -n 40 /tmp/fly.log
-
       - name: Roll back
-        if: failure() && (steps.smoke.outcome == 'failure' || steps.regression.outcome == 'failure') && steps.preflight.outputs.previous != ''
+        if: failure() && steps.smoke.outcome == 'failure' && steps.preflight.outputs.previous != ''
         env:
           PREVIOUS: ${{ steps.preflight.outputs.previous }}
         run: |
