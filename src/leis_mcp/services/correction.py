@@ -156,7 +156,7 @@ class CorpusCorrector:
         if not self._planalto.accepted(loaded.norm, page):
             return None
         document = DocumentParser().parse(page.body)
-        if conflicting_label(document, article, paragraph, clause):
+        if conflicting_label(document, article, paragraph, clause, subclause):
             raise QueryError(messages.PLANALT_AMBIGUOUS.format(article=Label.ordinal(key)))
         try:
             excerpt = ProvisionExtractor(document).extract(article, paragraph, clause, subclause)
@@ -196,8 +196,8 @@ class CorpusCorrector:
         if not self._planalto.accepted(loaded.norm, page):
             return None
         document = DocumentParser().parse(page.body)
-        if conflicting_label(document, article, paragraph, clause):
-            return None
+        if conflicting_label(document, article, paragraph, clause, subclause):
+            raise QueryError(messages.PLANALT_AMBIGUOUS.format(article=Label.ordinal(key)))
         try:
             excerpt = ProvisionExtractor(document).extract(article, paragraph, clause, subclause)
         except ProvisionNotFoundError:

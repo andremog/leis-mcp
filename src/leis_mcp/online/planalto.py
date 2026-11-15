@@ -5,33 +5,42 @@ accepted only when its opening text names the same law. Redirects are not follow
 written outside `cache/planalto`.
 """
 
-import html
 import json
 import logging
 import os
 import re
 import tempfile
-from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from html.parser import HTMLParser
 from pathlib import Path
 
 import httpx
+from lxml.etree import ParserError
+from lxml.html import HtmlElement, HTMLParser, document_fromstring
 
 from ..config import Settings
 from ..document import LegalDocument, Level
 from ..legal_text import DocumentParser
 from ..legal_text.insertions import digits
-from ..legal_text.labels import ArticleLabel, ClauseLabel, ParagraphLabel
+from ..legal_text.labels import ArticleLabel, ClauseLabel, ParagraphLabel, SubclauseLabel
 from ..models import Norm
-from .transport import official_client, read_body
+from .transport import MAX_BODY, official_client, read_body
 
 log = logging.getLogger(__name__)
 
-_SCRIPT = re.compile(r"(?is)<(script|style)\b[^>]*>.*?</\1>")
-_BREAK = re.compile(r"(?i)<br\s*/?>|</(?:p|div|h[1-6]|li|tr)>")
-_TAG = re.compile(r"(?s)<[^>]+>")
+# libxml2 HTML recovery. no_network blocks external entities; huge_tree stays off.
+# lxml is the parser itself: BeautifulSoup would still need a builder, and a second
+# unescape-after-regex pass is what used to delete a literal "&lt;".
+_PARSER_KWARGS = {
+    "recover": True,
+    "no_network": True,
+    "huge_tree": False,
+    "remove_comments": True,
+    "remove_pis": True,
+}
+_DROP_TAGS = frozenset({"script", "style", "noscript", "head"})
+_STRUCK_TAGS = frozenset({"s", "strike", "del"})
+_BLOCK_TAGS = frozenset({"p", "div", "li", "tr", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6"})
 _HEADING = re.compile(r"[ \t]{2,}(?=Art\.\s+\d)")
 _LAW = re.compile(r"Lei\s+(?:Complementar\s+)?n[ºo°.]?\s*(?P<number>[\d.]+)", re.IGNORECASE)
 
@@ -80,70 +89,64 @@ def decode_page(payload: bytes) -> str:
         return payload.decode("cp1252")
 
 
-class _DropStruck(HTMLParser):
-    """Emits the page again with struck subtrees removed, including nested spans."""
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self._parts: list[str] = []
-        self._stack: list[bool] = []
-        self._depth = 0
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self._open(tag, attrs, close=False)
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        self._open(tag, attrs, close=True)
-
-    def _open(self, tag: str, attrs: list[tuple[str, str | None]], *, close: bool) -> None:
-        struck = _is_struck(tag, attrs)
-        if not close:
-            self._stack.append(struck)
-        if struck or self._depth:
-            if struck and not close:
-                self._depth += 1
-            return
-        rendered = "".join(
-            f" {name}" if value is None else f' {name}="{html.escape(value, quote=True)}"' for name, value in attrs
-        )
-        self._parts.append(f"<{tag}{rendered}{' /' if close else ''}>")
-
-    def handle_endtag(self, tag: str) -> None:
-        struck = self._stack.pop() if self._stack else False
-        if struck:
-            self._depth = max(0, self._depth - 1)
-            return
-        if self._depth:
-            return
-        self._parts.append(f"</{tag}>")
-
-    def handle_data(self, data: str) -> None:
-        if not self._depth:
-            self._parts.append(data)
-
-    def result(self) -> str:
-        return "".join(self._parts)
-
-
-def _is_struck(tag: str, attrs: list[tuple[str, str | None]]) -> bool:
-    if tag.lower() in {"s", "strike", "del"}:
+def _struck(element: HtmlElement) -> bool:
+    tag = element.tag.lower() if isinstance(element.tag, str) else ""
+    if tag in _STRUCK_TAGS or tag in _DROP_TAGS:
         return True
-    style = next((value or "" for name, value in attrs if name.lower() == "style"), "")
-    return "line-through" in style.replace(" ", "").lower()
+    style = (element.get("style") or "").replace(" ", "").lower()
+    return "text-decoration:line-through" in style or "text-decoration-line:line-through" in style
 
 
-def drop_struck(page: str) -> str:
-    parser = _DropStruck()
-    parser.feed(page)
-    parser.close()
-    return parser.result()
+def _detach_keeping_tail(element: HtmlElement) -> None:
+    """Drop a struck element but keep the text that follows it in the parent."""
+    parent = element.getparent()
+    if parent is None:
+        return
+    tail = element.tail
+    if tail:
+        previous = element.getprevious()
+        if previous is not None:
+            previous.tail = (previous.tail or "") + tail
+        else:
+            parent.text = (parent.text or "") + tail
+        element.tail = None
+    parent.remove(element)
+
+
+def _render(element: HtmlElement) -> str:
+    chunks: list[str] = []
+    if element.text:
+        chunks.append(element.text)
+    for child in element:
+        tag = child.tag.lower() if isinstance(child.tag, str) else ""
+        if tag == "br":
+            chunks.append("\n")
+        elif tag in _BLOCK_TAGS:
+            chunks.append(f"\n{_render(child)}\n")
+        else:
+            chunks.append(_render(child))
+        if child.tail:
+            chunks.append(child.tail)
+    return "".join(chunks)
 
 
 def html_to_body(page: str) -> str:
-    text = drop_struck(page)
-    text = _SCRIPT.sub(" ", text)
-    text = _BREAK.sub("\n", text)
-    text = html.unescape(_TAG.sub("", text))
+    """Text of a Planalto page. Struck subtrees are removed on the DOM, then text nodes are read.
+
+    `&lt;` is already a character in the text node, so it is not eaten as a tag. `<br>` and a
+    stray end tag inside a strike stay inside that subtree because libxml2 recovers the tree.
+    """
+    if len(page) > MAX_BODY:
+        raise ValueError("html document exceeds the size cap")
+    try:
+        root = document_fromstring(page, parser=HTMLParser(**_PARSER_KWARGS))
+    except ParserError:
+        return ""
+    for element in list(root.iter()):
+        if isinstance(element.tag, str) and _struck(element):
+            _detach_keeping_tail(element)
+    body = root.find("body")
+    text = _render(body if body is not None else root)
     text = _HEADING.sub("\n", text)
     lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n")]
     return _join_split_labels("\n".join(line for line in lines if line))
@@ -165,25 +168,122 @@ def _join_split_labels(text: str) -> str:
 
 
 def conflicting_label(
-    document: LegalDocument, article: str, paragraph: str | None = None, clause: str | None = None
+    document: LegalDocument,
+    article: str,
+    paragraph: str | None = None,
+    clause: str | None = None,
+    subclause: str | None = None,
 ) -> bool:
-    """True when the requested device still has two in-force labels after struck text was dropped."""
+    """True when the requested device still has two in-force labels.
+
+    Inciso ``I`` of the caput and inciso ``I`` of a paragraph are different devices. A repeated
+    inciso is a conflict only inside the paragraph (or the caput) that contains it.
+    """
     key = ArticleLabel.parse(article)
     found = [item for block in document.blocks for item in block.articles.values() if item.key == key]
     if len(found) != 1:
         return len(found) > 1
-    units = found[0].units
+    chosen = found[0]
+    paragraph_key = ParagraphLabel.parse(paragraph) if paragraph not in (None, "") else None
+    repeated_paragraph = _repeated(chosen, Level.PARAGRAPH, chosen.start, chosen.end)
+    if repeated_paragraph and (
+        paragraph_key is None or _count(chosen, Level.PARAGRAPH, paragraph_key, chosen.start, chosen.end) > 1
+    ):
+        return True
+    if paragraph_key is not None:
+        start, end = _paragraph_span(chosen, paragraph_key)
+        if start is None:
+            return False
+        return _scope_conflicts(chosen, start, end, clause, subclause)
+    caput_end = next((unit.line for unit in chosen.units if unit.level == Level.PARAGRAPH), chosen.end)
+    if clause not in (None, "") or subclause not in (None, ""):
+        return _scope_conflicts(chosen, chosen.start, caput_end, clause, subclause)
+    if _scope_conflicts(chosen, chosen.start, caput_end, None, None):
+        return True
+    for unit in chosen.units:
+        if unit.level != Level.PARAGRAPH:
+            continue
+        start, end = _paragraph_span(chosen, unit.key, unit.line)
+        if start is not None and _scope_conflicts(chosen, start, end, None, None):
+            return True
+    return False
 
-    def repeated(level: Level) -> set[str]:
-        keys = [unit.key for unit in units if unit.level == level]
-        return {item for item, count in Counter(keys).items() if count > 1}
 
-    paragraphs, clauses = repeated(Level.PARAGRAPH), repeated(Level.CLAUSE)
-    if paragraph not in (None, ""):
-        return ParagraphLabel.parse(paragraph) in paragraphs
+def _paragraph_span(article, key: str, line: int | None = None) -> tuple[int | None, int]:
+    matches = [unit for unit in article.units if unit.level == Level.PARAGRAPH and unit.key == key]
+    if line is not None:
+        matches = [unit for unit in matches if unit.line == line] or matches[:1]
+    if not matches:
+        return None, article.end
+    start = matches[0].line
+    later = [unit.line for unit in article.units if unit.level == Level.PARAGRAPH and unit.line > start]
+    return start, later[0] if later else article.end
+
+
+def _scope_conflicts(article, start: int, end: int, clause: str | None, subclause: str | None) -> bool:
+    clauses = _keys(article, Level.CLAUSE, start, end)
+    loose = _loose_subclauses(article, start, end)
+    if subclause not in (None, "") and clause in (None, "") and loose.count(SubclauseLabel.parse(subclause)) > 1:
+        return True
+    if clause in (None, "") and subclause in (None, "") and len(loose) != len(set(loose)):
+        return True
     if clause not in (None, ""):
-        return ClauseLabel.parse(clause) in clauses
-    return bool(paragraphs or clauses)
+        wanted = ClauseLabel.parse(clause)
+        if clauses.count(wanted) > 1:
+            return True
+        for clause_start, clause_end in _child_spans(article, Level.CLAUSE, start, end, wanted):
+            if _subclause_conflict(article, clause_start, clause_end, subclause):
+                return True
+        return False
+    if len(clauses) != len(set(clauses)):
+        return True
+    for clause_start, clause_end in _child_spans(article, Level.CLAUSE, start, end, None):
+        if _subclause_conflict(article, clause_start, clause_end, subclause):
+            return True
+    return False
+
+
+def _loose_subclauses(article, start: int, end: int) -> list[str]:
+    """Alíneas in this span that do not sit under an inciso."""
+    clause_lines = [line for line in _child_spans(article, Level.CLAUSE, start, end, None) for line in line[:1]]
+    keys = []
+    for unit in article.units:
+        if unit.level != Level.SUBCLAUSE or not start <= unit.line < end:
+            continue
+        if any(line <= unit.line for line in clause_lines):
+            continue
+        keys.append(unit.key)
+    return keys
+
+
+def _subclause_conflict(article, start: int, end: int, subclause: str | None) -> bool:
+    keys = _keys(article, Level.SUBCLAUSE, start, end)
+    if subclause not in (None, ""):
+        return keys.count(SubclauseLabel.parse(subclause)) > 1
+    return len(keys) != len(set(keys))
+
+
+def _child_spans(article, level: Level, start: int, end: int, key: str | None) -> list[tuple[int, int]]:
+    lines = [
+        unit.line
+        for unit in article.units
+        if unit.level == level and start <= unit.line < end and (key is None or unit.key == key)
+    ]
+    bounds = [*lines, end]
+    return list(zip(lines, bounds[1:], strict=False))
+
+
+def _keys(article, level: Level, start: int, end: int) -> list[str]:
+    return [unit.key for unit in article.units if unit.level == level and start <= unit.line < end]
+
+
+def _repeated(article, level: Level, start: int, end: int) -> bool:
+    keys = _keys(article, level, start, end)
+    return len(keys) != len(set(keys))
+
+
+def _count(article, level: Level, key: str, start: int, end: int) -> int:
+    return _keys(article, level, start, end).count(key)
 
 
 def names_law(body: str, number: str) -> bool:
@@ -231,7 +331,10 @@ class PlanaltoText:
         return self._client
 
     def _page(self, url: str, payload: bytes) -> OfficialPage | None:
-        body = html_to_body(decode_page(payload))
+        try:
+            body = html_to_body(decode_page(payload))
+        except ValueError:
+            return None
         # The caller checks the law number. A homepage or another act fails here only on emptiness.
         if "Art." not in body[:8000] and "LEI" not in body[:1500].upper():
             return None
@@ -250,7 +353,11 @@ class PlanaltoText:
             return None
         if not isinstance(meta, dict) or meta.get("url") != url or not isinstance(meta.get("fetched_on"), str):
             return None
-        page = OfficialPage(url, meta["fetched_on"], html_to_body(decode_page(payload)))
+        try:
+            body = html_to_body(decode_page(payload))
+        except ValueError:
+            return None
+        page = OfficialPage(url, meta["fetched_on"], body)
         return page if self.accepted(norm, page) else None
 
     def _write(self, norm: Norm, url: str, payload: bytes, fetched_on: str) -> None:

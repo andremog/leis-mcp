@@ -388,6 +388,115 @@ def test_nested_strike_and_windows_1252_keep_only_the_promulgated_paragraph():
     assert "(VETADO)" not in found
 
 
+def test_whole_article_allows_inciso_numbering_to_restart(tmp_path):
+    page = FIXTURE.read_text(encoding="utf-8").replace(
+        "<p>Art. 37. O julgamento por melhor técnica ou por técnica e preço deverá ser realizado por:</p>",
+        "<p>Art. 37. O julgamento por melhor técnica ou por técnica e preço deverá ser realizado por:</p>"
+        "<p>I - verificação da capacitação e da experiência do licitante;</p>"
+        "<p>§ 1º A banca referida no inciso II do caput deste artigo terá no mínimo 3 (três) membros.</p>"
+        "<p>I - integrante indicado pelo órgão;</p>",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=page)
+
+    loaded = _load(VETO_14133, _norm("14133", 2021))
+    result = _corrector(tmp_path, handler).read(_Service({}), loaded, "37", None, None, None, None)
+    text = re.sub(r"\s+", " ", result["dispositivo"]["texto"])
+    assert "verificação da capacitação" in text
+    assert "Ressalvados os casos de inexigibilidade" in text
+    assert "(VETADO)" not in text
+    caput = _corrector(tmp_path, handler).read(_Service({}), loaded, "37", None, "I", None, None)
+    assert "verificação da capacitação" in caput["dispositivo"]["texto"]
+    inner = _corrector(tmp_path, handler).read(_Service({}), loaded, "37", "2", "I", None, None)
+    assert "melhor técnica" in inner["dispositivo"]["texto"]
+    assert "verificação da capacitação" not in inner["dispositivo"]["texto"]
+
+
+def test_repeated_inciso_inside_one_paragraph_fails_closed(tmp_path):
+    page = """<html><body>
+    <p>LEI Nº 14.133, DE 1º DE ABRIL DE 2021</p>
+    <p>Art. 37. Caput.</p>
+    <p>I - inciso único do caput.</p>
+    <p>§ 2º Texto do parágrafo.</p>
+    <p>I - texto vetado do inciso.</p>
+    <p>I - texto vigente do inciso.</p>
+    <p>a) alinea vetada.</p>
+    <p>a) alinea vigente.</p>
+    </body></html>"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=page)
+
+    loaded = _load(VETO_14133, _norm("14133", 2021))
+    corrector = _corrector(tmp_path, handler)
+    for args in (("37", "2", None, None), ("37", "2", "I", None), ("37", "2", "I", "a")):
+        with pytest.raises(QueryError, match="dois rótulos vigentes") as error:
+            corrector.read(_Service({}), loaded, *args, None)
+        assert "texto vetado do inciso" not in str(error.value)
+        assert "texto vigente do inciso" not in str(error.value)
+        assert "alinea vetada" not in str(error.value)
+
+
+def test_struck_br_and_stray_end_tag_drop_only_the_revoked_tail():
+    page = """<html><body>
+    <p>LEI Nº 14.133, DE 1º DE ABRIL DE 2021</p>
+    <p>Art. 37. Caput.</p>
+    <span style="text-decoration: line-through">§ 1º (VETADO). trecho revogado</font> continua revogado.</span>
+    <p>§ 1º Texto vigente do parágrafo.</p>
+    <strike>§ 2º (VETADO).<br>mais revogado</strike>
+    <p>§ 2º Ressalvados os casos de inexigibilidade.</p>
+    </body></html>"""
+    body = html_to_body(page)
+    assert "(VETADO)" not in body
+    assert "continua revogado" not in body
+    assert "mais revogado" not in body
+    assert "Texto vigente do parágrafo" in body
+    assert "Ressalvados os casos de inexigibilidade" in body
+
+
+def test_parser_refuses_an_oversized_page_and_ignores_external_entities():
+    with pytest.raises(ValueError, match="size cap"):
+        html_to_body("x" * (4 * 1024 * 1024 + 1))
+    page = (
+        '<!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://127.0.0.1/secret-from-network">]>'
+        "<p>LEI Nº 14.133, DE 1º DE ABRIL DE 2021</p><p>Art. 1º &xxe; fim.</p>"
+    )
+    body = html_to_body(page)
+    assert "secret-from-network" not in body
+    assert "Art. 1º" in body
+
+
+def test_inline_strike_keeps_the_following_words_and_loose_alinea_fails_closed(tmp_path):
+    page = """<html><body>
+    <p>LEI Nº 14.133, DE 1º DE ABRIL DE 2021</p>
+    <p>Art. 37. O prazo é de <span style="text-decoration: line-through">30</span> 15 dias.</p>
+    <p style="text-decoration: line-through">§ 1º (VETADO).</p>
+    § 1º Texto vigente solto.
+    <p>§ 2º Texto do parágrafo.</p>
+    <p>a) texto vetado da alinea.</p>
+    <p>a) texto vigente da alinea.</p>
+    </body></html>"""
+    body = html_to_body(page)
+    assert "O prazo é de 15 dias." in re.sub(r"\s+", " ", body)
+    assert "(VETADO)" not in body
+    assert "Texto vigente solto." in body
+    loaded = _load(VETO_14133, _norm("14133", 2021))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=page)
+
+    with pytest.raises(QueryError, match="dois rótulos vigentes") as error:
+        _corrector(tmp_path, handler).read(_Service({}), loaded, "37", "2", None, "a", None)
+    assert "texto vetado da alinea" not in str(error.value)
+
+
+def test_literal_less_than_entity_survives_tag_removal():
+    page = "<p>LEI Nº 14.133, DE 1º DE ABRIL DE 2021</p><p>Art. 9º O valor &lt; 10 e &gt; 5 permanece.</p>"
+    body = html_to_body(page)
+    assert "O valor < 10 e > 5 permanece." in body
+
+
 def test_html_fixture_keeps_the_official_article_sentence():
     body = html_to_body(PLANALT_14133)
     assert "LEI Nº 14.133" in body
