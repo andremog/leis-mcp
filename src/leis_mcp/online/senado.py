@@ -32,10 +32,10 @@ class SenadoSource:
 
     @classmethod
     def supports(cls, kind: str | None) -> bool:
-        return kind in cls.KINDS
+        return isinstance(kind, str) and kind in cls.KINDS
 
     def fetch(self, kind: str, number: str, year: int) -> dict[str, Any] | None:
-        if kind not in self.KINDS or not acceptable_senate(number, year):
+        if not self.supports(kind) or not acceptable_senate(number, year):
             raise httpx.InvalidURL("refused")
         url = self.URL.format(kind=self.KINDS[kind], number=number, year=year)
         data = read_json(self._client, url)

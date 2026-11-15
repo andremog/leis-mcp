@@ -200,6 +200,21 @@ def test_dns_timeout_does_not_wait_for_the_resolver(monkeypatch):
     assert time.monotonic() - started < 2
 
 
+def test_non_string_kind_does_not_crash_the_lookup(tmp_path):
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.host)
+        return httpx.Response(200, json={"legislationIdentifier": URN})
+
+    loaded = _loaded(TEXT)
+    loaded.metadata["tipo"] = ["Lei Ordinária"]
+    validity = OnlineValidity(Settings(home=tmp_path), _client(handler))
+    payload = _read(validity, loaded).payload
+    assert payload["disponivel"] is True
+    assert calls == ["normas.leg.br"]
+
+
 def test_auth_middleware_still_rejects_mcp_without_bearer():
     """The HTTP key check is unchanged by the vigência client: /health stays open, /mcp does not."""
     from starlette.applications import Starlette

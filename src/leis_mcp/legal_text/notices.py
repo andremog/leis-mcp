@@ -28,10 +28,10 @@ class ProvisionNotices:
         """Status of a provision whose first line is its label plus a repeal or veto annotation, or ends with one
         (compiled texts may keep the old wording before the note)."""
         lines = [line for line in text.strip().splitlines() if line.strip()]
-        rest = cls._LABEL.sub("", lines[0], count=1).strip(" *_.") if lines else ""
+        rest = cls._LABEL.sub("", lines[0], count=1).strip(" *_.;") if lines else ""
         match = cls._ANNOTATION.fullmatch(rest) or cls._ending_annotation(rest)
         if not match and not rest and len(lines) > 1:  # label alone on its line, only a note on the next
-            match = cls._ANNOTATION.fullmatch(lines[1].strip(" *_."))
+            match = cls._ANNOTATION.fullmatch(lines[1].strip(" *_.;"))
         if not match:
             return None
         revoked = match["kind"].lower().startswith("revogad")
@@ -42,7 +42,7 @@ class ProvisionNotices:
         """A closing note about the whole provision; `(vetado o § 2º)` or `(revogados os incisos I a III)` are not."""
         matches = list(cls._ANNOTATION.finditer(line))
         last = matches[-1] if matches else None
-        if not last or line[last.end() :].strip(" *_.") or not cls._WHOLE_NOTE.fullmatch(last["note"].strip()):
+        if not last or line[last.end() :].strip(" *_.;") or not cls._WHOLE_NOTE.fullmatch(last["note"].strip()):
             return None
         return last
 

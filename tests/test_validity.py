@@ -111,6 +111,7 @@ def test_wording(version, consolidated):
         ("§ 2º (Vetado).", False, "Vetado"),
         ("Parágrafo único. (VETADO)", False, "VETADO"),
         ("III - (VETADO).", False, "VETADO"),
+        ("IV - (Revogado pela Constituição Federal de 1988);", True, "Revogado pela Constituição Federal de 1988"),
         (
             "Art. 11. Texto antigo mantido. *(Revogado pela Lei nº 1, de 2/1/2004)*",
             True,

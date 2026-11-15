@@ -79,7 +79,9 @@ class OnlineValidity:
             provision, provision_notices = self._provision(record, Address.requested(excerpt.article, excerpt.units))
         except Exception as exc:  # noqa: BLE001 - a damaged cache record must not fail the tool call
             log.warning("Online lookup record is unusable: %s", type(exc).__name__)
-            return OnlineResult({"disponivel": False, "motivo": messages.ONLINE_UNAVAILABLE.format(details=exc)})
+            return OnlineResult(
+                {"disponivel": False, "motivo": messages.ONLINE_UNAVAILABLE.format(details=type(exc).__name__)}
+            )
         payload = {
             "disponivel": True,
             "consultado_em": record["consultado_em"],
