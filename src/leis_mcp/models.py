@@ -24,6 +24,9 @@ class SourceField(StrEnum):
     URN = "urn"
     STATE = "uf"
     DOWNLOADED_AT = "baixado_em"
+    LEGAL_FORCE = "forca_legal_fonte"  # normas.leg.br `legislationLegalForce`, as a JSON list
+    IN_FORCE = "vigente_fonte"  # regulators
+    REPEAL_EVIDENCE = "evidencia_revogacao"  # regulators
     # Parliamentary overlay. Absent on upstream norms.
     IDENTIFIER = "identificador"
     ORGAN = "orgao"
@@ -105,6 +108,43 @@ class SourceText:
     body_offset: int  # lines before the body, to map file lines to body lines
 
 
+class ValidityState(StrEnum):
+    """What the sources say about a norm being in force. Never inferred from missing data."""
+
+    REVOKED = "revogada"
+    NOT_IN_FORCE = "sem_vigencia_na_fonte"
+    IN_FORCE = "vigente_segundo_a_fonte"
+    NO_REPEAL_RECORDED = "sem_revogacao_registrada"
+    OTHER = "outra"
+    UNKNOWN = "nao_informada"
+    CONFLICTING = "conflitante"
+
+
+@dataclass(frozen=True, slots=True)
+class Validity:
+    state: ValidityState
+    fields: dict[str, Any]  # raw source fields behind the state
+    repealed_by: str | None = None
+    origin: str = "acervo"
+
+
+@dataclass(frozen=True, slots=True)
+class Wording:
+    version: str | None
+    consolidated: bool | None
+    captured_at: str | None
+    commit: str
+
+
+@dataclass(frozen=True, slots=True)
+class ProvisionStatus:
+    """A provision whose whole text is a repeal or veto annotation, e.g. `I - *(Revogado pela Lei ...)*`."""
+
+    revoked: bool
+    vetoed: bool
+    note: str
+
+
 @dataclass(frozen=True, slots=True)
 class Excerpt:
     citation: str
@@ -112,6 +152,9 @@ class Excerpt:
     head: str | None  # caput, only when a paragraph/clause/subclause was requested
     block_title: str
     notices: tuple[str, ...]
+    article: str = ""
+    units: tuple[tuple[int, str], ...] = ()  # requested (Level, key) pairs, paragraph -> subclause
+    status: ProvisionStatus | None = None
 
 
 @dataclass(frozen=True, slots=True)

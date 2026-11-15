@@ -1,0 +1,30 @@
+{
+ "@type": "Legislation",
+ "legislationIdentifier": "urn:lex:br:federal:lei:1993-06-21;8666",
+ "legislationType": "Lei Ordinária",
+ "legislationLegalForce": "NotInForce",
+ "@reverse": {
+  "legislationRepeals": {
+   "@type": "Legislation",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:2021-04-01;14133"
+  },
+  "legislationApplies": {
+   "@type": "Legislation",
+   "@id": "https://normas.leg.br/?urn=urn:lex:br:federal:lei:1995-02-13;8987"
+  }
+ },
+ "encoding": [
+  {
+   "version": "Original"
+  },
+  {
+   "version": "Intermediate"
+  },
+  {
+   "version": "Intermediate"
+  },
+  {
+   "version": "Current"
+  }
+ ]
+}

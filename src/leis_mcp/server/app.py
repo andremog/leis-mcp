@@ -29,11 +29,13 @@ class LeisServer:
 
     _READ_ONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True)
     _DESCRIPTIONS = {
-        "buscar_norma": "Localiza uma norma e devolve metadados do cabeçalho (título, ementa, data, revogada, versão do "
-        "texto), caminho e link oficial da fonte. Para resolução do Congresso, da Câmara ou do Senado, informe o órgão "
-        "na referência ('do Congresso Nacional') ou em `orgao`, para não confundir com homônimo estadual ou municipal.",
+        "buscar_norma": "Localiza uma norma e devolve metadados do cabeçalho (título, ementa, data), `vigencia` "
+        "(estado segundo a fonte, sem presumir vigência), `redacao` (compilada ou original), caminho e link oficial "
+        "da fonte. Para resolução do Congresso, da Câmara ou do Senado, informe o órgão na referência "
+        "('do Congresso Nacional') ou em `orgao`, para não confundir com homônimo estadual ou municipal.",
         "ler_artigo": "Devolve o texto exato de um artigo (ou parágrafo, inciso, alínea), com o caput como contexto, "
-        "link da fonte e avisos de revogação ou texto não compilado.",
+        "link da fonte, `vigencia` e `redacao` da norma, situação do dispositivo (revogado, vetado) e, para normas "
+        "federais, `vigencia_online` com as redações e alterações registradas no normas.leg.br e no Senado.",
         "buscar_texto": "Busca um termo dentro de uma norma, ou nas normas já em cache local, indicando o artigo de "
         "cada ocorrência.",
         "listar_normas": "Navega pelo acervo: sem filtros devolve contagens por esfera; com esfera, por tipo; com tipo, "

@@ -15,7 +15,7 @@ async def _sessao(settings):
     params = StdioServerParameters(
         command=sys.executable,
         args=["-m", "leis_mcp", "serve"],
-        env={**os.environ, "LEIS_MCP_HOME": str(settings.home)},
+        env={**os.environ, "LEIS_MCP_HOME": str(settings.home), "LEIS_MCP_OFFLINE": "1"},
     )
     async with Client(params) as client:
         ferramentas = {t.name for t in (await client.list_tools()).tools}
