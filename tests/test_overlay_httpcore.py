@@ -1,14 +1,20 @@
 """Real httpcore response lifecycle with a fake network, plus one bounded official fetch."""
 
+import re
+import ssl
 import time
 
 import httpcore
 import pytest
 
 from leis_mcp.overlay.allowlist import FetchRejected
-from leis_mcp.overlay.collector import Collector
+from leis_mcp.overlay.collector import Collector, Fetched
 
 OFFICIAL = "https://www2.camara.leg.br/legin/fed/rescon/2002/resolucao-1-8-maio-2002-497942-normaatualizada-pl.html"
+_HTTP_STATUS = re.compile(r"HTTP (\d{3}) na fonte oficial\.")
+# 404 is the HTML page missing on the same envoy that also answers 502/503/504.
+# The collector in production still rejects every one of these.
+_OUTAGE_STATUS = frozenset({404, 502, 503, 504})
 
 
 class ScriptedStream(httpcore.NetworkStream):
@@ -142,9 +148,114 @@ def test_redirect_and_blocked_connect_use_the_remaining_deadline():
     assert time.monotonic() - started < 0.5
 
 
-@pytest.mark.integration  # live HTTPS to www2.camara.leg.br
-def test_bounded_official_resolution_page():
-    fetched = Collector(max_bytes=400_000, total_timeout=40).fetch(OFFICIAL)
+def _chain(exc: BaseException) -> list[BaseException]:
+    found: list[BaseException] = []
+    seen: set[int] = set()
+    pending: list[BaseException] = [exc]
+    while pending:
+        current = pending.pop(0)
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        found.append(current)
+        nested = current.__cause__
+        if nested is None and not current.__suppress_context__:
+            nested = current.__context__
+        if isinstance(nested, BaseException):
+            pending.append(nested)
+        pending.extend(arg for arg in current.args if isinstance(arg, BaseException))
+    return found
+
+
+def official_source_outage(exc: BaseException) -> str | None:
+    """Skip reason when the official HTML page is not being served. None means the failure stands."""
+    if any(isinstance(item, ssl.SSLCertVerificationError) for item in _chain(exc)):
+        return None
+    message = str(exc)
+    status = _HTTP_STATUS.fullmatch(message)
+    if status:
+        code = int(status.group(1))
+        if code in _OUTAGE_STATUS:
+            return f"fonte oficial indisponível: HTTP {code} ({type(exc).__name__}: {exc})"
+        return None
+    if message.startswith("Falha de rede ao buscar a fonte oficial"):
+        return f"fonte oficial indisponível: {type(exc).__name__}: {exc}"
+    if message == "Prazo da coleta esgotado." or message.startswith("Prazo esgotado ao resolver "):
+        return f"fonte oficial indisponível: timeout ({type(exc).__name__}: {exc})"
+    return None
+
+
+def fetch_official_or_skip(fetch):
+    try:
+        return fetch()
+    except Exception as exc:
+        reason = official_source_outage(exc)
+        if reason is None:
+            raise
+        pytest.skip(reason)
+
+
+def _assert_bounded_official_page(fetched: Fetched) -> None:
     assert len(fetched.data) < 400_000
     assert "quadragésimo segundo" in fetched.text()
     assert fetched.url.startswith("https://www2.camara.leg.br/")
+
+
+def _response(status: int, body: bytes) -> list[bytes]:
+    header = (
+        f"HTTP/1.1 {status} X\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {len(body)}\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode()
+    return [header, body]
+
+
+def _fetch_scripted(chunks: list[bytes | BaseException], **kwargs):
+    return Collector(resolve=_public_dns, network=ScriptedBackend([chunks], []), total_timeout=2, **kwargs).fetch(
+        OFFICIAL
+    )
+
+
+@pytest.mark.integration  # live HTTPS to www2.camara.leg.br
+def test_bounded_official_resolution_page():
+    fetched = fetch_official_or_skip(lambda: Collector(max_bytes=400_000, total_timeout=40).fetch(OFFICIAL))
+    _assert_bounded_official_page(fetched)
+
+
+@pytest.mark.parametrize("status", [404, 502, 503, 504])
+def test_missing_or_gateway_page_skips(status):
+    body = "norma atualizada quadragésimo segundo".encode()
+    with pytest.raises(pytest.skip.Exception, match=rf"HTTP {status}") as skipped:
+        fetch_official_or_skip(lambda: _fetch_scripted(_response(status, body), max_bytes=400_000))
+    assert "FetchRejected" in str(skipped.value)
+
+
+@pytest.mark.parametrize("status", [400, 403, 500])
+def test_other_http_status_fails(status):
+    with pytest.raises(FetchRejected, match=rf"HTTP {status} na fonte oficial\."):
+        fetch_official_or_skip(lambda: _fetch_scripted(_response(status, b"no"), max_bytes=400_000))
+
+
+def test_http_200_without_the_phrase_fails_the_page_assertions():
+    fetched = fetch_official_or_skip(lambda: _fetch_scripted(_html(b"<html>sem a frase</html>"), max_bytes=400_000))
+    with pytest.raises(AssertionError):
+        _assert_bounded_official_page(fetched)
+
+
+def test_size_limit_is_not_an_outage():
+    with pytest.raises(FetchRejected, match="limite"):
+        fetch_official_or_skip(lambda: _fetch_scripted(_html(b"x" * 80), max_bytes=40))
+
+
+def test_network_failure_skips_and_certificate_failure_does_not():
+    try:
+        raise FetchRejected("Falha de rede ao buscar a fonte oficial (ConnectTimeout).") from httpcore.ConnectTimeout(
+            "t"
+        )
+    except FetchRejected as exc:
+        assert official_source_outage(exc) is not None
+    try:
+        raise FetchRejected(
+            "Falha de rede ao buscar a fonte oficial (ConnectError)."
+        ) from ssl.SSLCertVerificationError("certificate verify failed")
+    except FetchRejected as exc:
+        assert official_source_outage(exc) is None
