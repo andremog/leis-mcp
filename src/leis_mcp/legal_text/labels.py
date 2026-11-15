@@ -2,7 +2,8 @@
 
 Covers the variations found in the corpus: `**Art. 1º**`, `Art. 1o`, `Art. 1.º`, `Art. 10.`,
 `Art. 1.000.`, `Art. 4º-A`, `Art. 359-M-A`, `Art. l97.` (OCR), `§ 2°`, `Parágrafo único`,
-`III -`, `II–`, `a)`.
+`III -`, `II–`, `a)`. Quoted veto promulgations also use `"**Art. 37**`, `**"Art.** 54`
+and `**"Art**. 115`, recognized only by `ArticleLabel.from_quoted_line`.
 """
 
 import re
@@ -20,6 +21,10 @@ class Label(ABC):
 
     _MARKUP = re.compile(r"^\s*[*_]+\s*")
     _STRIKE_EDGE = re.compile(r"^(?:~~\s*)+|(?:\s*~~)+$")
+    # Quotes and emphasis that wrap a label. Letters and digits are excluded, so a failed match
+    # does not walk back through the line.
+    _NOISE = r"""[\s*"'“”«»*_]"""
+    _QUOTED_LEAD = re.compile(rf"^{_NOISE}+")
     # Ordinal marker and letter suffix right after a number: "º-A.", "o", ".º"
     _SUFFIX = re.compile(r"^\s*(?:\.?\s*[º°ª]|o(?![a-zà-ú]))?\s*\.?\s*(?P<suffix>(?:-[A-Z](?![a-zà-ú]))*)")
 
@@ -27,6 +32,11 @@ class Label(ABC):
     def strip_markup(cls, text: str) -> str:
         """Drops emphasis and a wrapping `~~` so a struck provision is still addressable."""
         return cls._STRIKE_EDGE.sub("", cls._MARKUP.sub("", text))
+
+    @classmethod
+    def unwrap_quotes(cls, text: str) -> str:
+        """Drops a leading run of quotes and emphasis after `strip_markup`."""
+        return cls._QUOTED_LEAD.sub("", cls.strip_markup(text))
 
     @classmethod
     def suffix(cls, rest: str) -> str:
@@ -60,6 +70,10 @@ class UnitLabel(Label, ABC):
 
 class ArticleLabel(Label):
     _LINE = re.compile(r"^Art(?:igo)?\s*\.?\s*(?P<number>(?:l(?=\d))?\d+(?:\.\d{3})*)(?P<rest>.*)$")
+    # `"**Art. 37**`, `**"Art.** 54`, `**"Art**. 115`. Possessive noise: at most one dot, no backtracking.
+    _QUOTED_LINE = re.compile(
+        rf"^Art(?:igo)?{Label._NOISE}*+\.?{Label._NOISE}*+(?P<number>(?:l(?=\d))?\d+(?:\.\d{{3}})*)(?P<rest>.*)$"
+    )
     _USER_PREFIX = re.compile(r"^art(?:igo)?\s*\.?\s*", re.IGNORECASE)
     _USER_NUMBER = re.compile(r"(?:l(?=\d))?\d+(?:\.\d{3})*")
     _LOOSE_SUFFIX = re.compile(r"-\s*([A-Za-z])(?![a-z])")
@@ -67,6 +81,12 @@ class ArticleLabel(Label):
     @classmethod
     def from_line(cls, line: str) -> str | None:
         match = cls._LINE.match(cls.strip_markup(line))
+        return cls._number(match["number"]) + cls.suffix(match["rest"]) if match else None
+
+    @classmethod
+    def from_quoted_line(cls, line: str) -> str | None:
+        """Same key as `from_line`, also accepting quotes and emphasis inside the label."""
+        match = cls._QUOTED_LINE.match(cls.unwrap_quotes(line))
         return cls._number(match["number"]) + cls.suffix(match["rest"]) if match else None
 
     @classmethod

@@ -89,9 +89,11 @@ class Block:
 
 
 class LegalDocument:
-    def __init__(self, lines: list[str], blocks: list[Block]):
+    def __init__(self, lines: list[str], blocks: list[Block], *, quoted_fallback: bool = False):
         self.lines = lines
         self.blocks = blocks
+        # True when every article heading was quoted (promulgation of vetoed parts, not the full norm).
+        self.quoted_fallback = quoted_fallback
         articles = chain.from_iterable(block.articles.values() for block in blocks)
         self._ordered = sorted(articles, key=lambda article: article.start)
         self._starts = [article.start for article in self._ordered]
